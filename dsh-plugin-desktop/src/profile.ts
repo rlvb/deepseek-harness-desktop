@@ -56,6 +56,9 @@ export const DESKTOP_PROFILE_NAME = 'desktop'
 /** Standalone package name inserted through the launcher-owned desktop layer. */
 export const DESKTOP_PACKAGE_NAME = 'dsh-plugin-desktop'
 
+/** Enterprise model gateway bundle inserted into every Desktop profile. */
+export const DSH_SUB2API_PACKAGE = 'dsh-sub2api'
+
 /** Empty include root rewritten before every profile boot. */
 export const DESKTOP_PROFILE_ROOT = 'cordis.yml'
 
@@ -260,8 +263,9 @@ export interface SkippedOptionalEntry {
 export function desktopBundleList(current: readonly string[]): string[] {
   const thirdParty = current.filter(name => !REQUIRED_BUNDLE_SET.has(name)
     && name !== DESKTOP_PACKAGE_NAME
+    && name !== DSH_SUB2API_PACKAGE
     && !OBSOLETE_DESKTOP_BUNDLE_SET.has(name))
-  return [...REQUIRED_BUNDLES, ...thirdParty]
+  return [...REQUIRED_BUNDLES, DSH_SUB2API_PACKAGE, ...thirdParty]
 }
 
 /** Return whether two ordered string lists are identical. */

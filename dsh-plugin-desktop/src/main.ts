@@ -21,6 +21,7 @@ import {
 } from './desktop-runtime-environment.ts'
 import { desktopProductVersion, ElectronDesktopRuntime } from './electron-runtime.ts'
 import { showDesktopMessageBox } from './desktop-dialog-window.ts'
+import { DesktopEmbeddedBrowserService } from './desktop-embedded-browser.ts'
 import {
   ElectronStderrLogger,
   installDesktopChildProcessLogging,
@@ -849,6 +850,12 @@ async function start(): Promise<void> {
       prepared.patches,
       async (hostCtx) => {
         generation.bindHost(hostCtx)
+        const embeddedBrowser = new DesktopEmbeddedBrowserService()
+        hostCtx.provide('desktopEmbeddedBrowser', embeddedBrowser)
+        hostCtx.effect(
+          () => () => embeddedBrowser.dispose(),
+          'dsh-plugin-desktop: embedded authentication browser',
+        )
         hostCtx.effect(
           () => releasePnpmRuntime,
           'dsh-plugin-desktop: packaged pnpm runtime PATH',

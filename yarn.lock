@@ -8343,6 +8343,7 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
     dsh-community-market: "npm:0.1.0-dev.0"
+    dsh-sub2api: "file:../../dsh-sub2api"
     dshmarket: "npm:1.17.1"
     electron: "npm:43.4.0"
     electron-builder: "npm:26.15.7"
@@ -8370,6 +8371,17 @@ __metadata:
     dsh-plugin-desktop: lib/bin.js
   languageName: unknown
   linkType: soft
+
+"dsh-sub2api@file:../../dsh-sub2api::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
+  version: 0.1.0
+  resolution: "dsh-sub2api@file:../../dsh-sub2api#../../dsh-sub2api::hash=189137&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+  peerDependencies:
+    react: 18.3.1
+  bin:
+    dsh-sub2api: ./index.mjs
+  checksum: 10c0/ecd73d2a586a1709a4912e60a9150cb1081645e9ef2850b2d55deb994750ac5bb5902c3fc9cadec5d792a8e512d5c5f8ac4cbffcb3e31d9be791ee9e30ba7e23
+  languageName: node
+  linkType: hard
 
 "dshmarket@npm:1.17.1":
   version: 1.17.1
