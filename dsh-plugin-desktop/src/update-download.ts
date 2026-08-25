@@ -9,10 +9,10 @@ import { compareSemVerVersions, parseSemVer } from './update-checker.ts'
 /** Desktop platforms with a fixed installer download endpoint. */
 export type DesktopDownloadPlatform = 'darwin' | 'win32'
 
-/** Fixed download endpoints that record one user-confirmed installer download. */
+/** Fixed enterprise download endpoints that record one user-confirmed installer download. */
 export const DESKTOP_DOWNLOAD_URLS: Readonly<Record<DesktopDownloadPlatform, string>> = {
-  darwin: 'https://www.dshdesktop.cn/api/downloads/mac',
-  win32: 'https://www.dshdesktop.cn/api/downloads/windows',
+  darwin: 'https://api.8outlets.com:9443/guide/dsh-desktop/mac.dmg',
+  win32: 'https://api.8outlets.com:9443/guide/dsh-desktop/windows.exe',
 }
 
 /** Maximum accepted installer size, in bytes. */

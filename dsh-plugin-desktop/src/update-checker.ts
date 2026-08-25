@@ -1,7 +1,7 @@
-/** Headless version checks against the public DSH Desktop release service. */
+/** Headless version checks against the enterprise DSH Desktop release service. */
 
-/** Public endpoint returning the latest stable DSH Desktop version. */
-export const DESKTOP_VERSION_ENDPOINT = 'https://www.dshdesktop.cn/api/desktop/version'
+/** Enterprise static endpoint returning the latest stable DSH Desktop version. */
+export const DESKTOP_VERSION_ENDPOINT = 'https://api.8outlets.com:9443/guide/dsh-desktop/version.json'
 
 /** Maximum response body bytes accepted from the version service. */
 export const MAX_VERSION_RESPONSE_BYTES = 4 * 1024
