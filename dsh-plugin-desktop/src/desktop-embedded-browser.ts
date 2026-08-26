@@ -133,6 +133,8 @@ export class DesktopEmbeddedBrowserService implements DesktopEmbeddedBrowser {
       },
     })
     this.window = window
+    const chromeLikeUserAgent = window.webContents.getUserAgent().replace(/\sElectron\/\S+/u, '')
+    window.webContents.setUserAgent(chromeLikeUserAgent)
     window.removeMenu()
     const isAllowed = (value: string): boolean => {
       try {
@@ -164,6 +166,7 @@ export class DesktopEmbeddedBrowserService implements DesktopEmbeddedBrowser {
       if (!window.isDestroyed()) window.destroy()
     }
     try {
+      await window.webContents.session.clearStorageData({ origin: loginUrl.origin, storages: ['localstorage'] })
       await window.loadURL(loginUrl.href)
       const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
       let finalUrl = loginUrl.href
@@ -178,7 +181,7 @@ export class DesktopEmbeddedBrowserService implements DesktopEmbeddedBrowser {
           if (hasAuthValue(storage)) {
             return Object.freeze({
               storage,
-              userAgent: window.webContents.getUserAgent(),
+              userAgent: chromeLikeUserAgent,
               finalUrl,
             })
           }
