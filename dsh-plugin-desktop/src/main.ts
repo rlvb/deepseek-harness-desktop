@@ -23,7 +23,6 @@ import {
   installDesktopPnpmRuntime,
 } from './desktop-runtime-environment.ts'
 import { desktopProductVersion, ElectronDesktopRuntime } from './electron-runtime.ts'
-import { showDesktopMessageBox } from './desktop-dialog-window.ts'
 import { DesktopEmbeddedBrowserService } from './desktop-embedded-browser.ts'
 import { getOrCreateDesktopInstallationId } from './desktop-installation-id.ts'
 import {

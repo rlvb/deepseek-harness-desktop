@@ -1,6 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
 import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import type { IApiClient, RpcResponse, SessionId, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-remotes/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -63,7 +62,7 @@ async function loadClientRuntime(): Promise<{
     },
   }
   ;(globalThis as { window?: unknown }).window = { __ModuleLoader__: moduleLoader }
-  await import(`${pathToFileURL(bundleUrl.pathname).href}?test-load=${nextModuleLoad++}`)
+  await import(`${bundleUrl.href}?test-load=${nextModuleLoad++}`)
   return moduleLoader.modules.get('@deepseek-ai/dsh-client-runtime') as {
     SessionRuntime: SessionRuntimeCtor
     WorkspaceRuntime: WorkspaceRuntimeCtor

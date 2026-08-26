@@ -74,6 +74,13 @@ export function recoveryPluginEnvironment(
   platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
   const environment = { ...(options.environment ?? process.env) }
+  if (platform === 'win32' && environment.PATHEXT === undefined) {
+    environment.PATHEXT = process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD'
+  }
+  if (platform === 'win32') {
+    if (environment.ComSpec === undefined && process.env.ComSpec !== undefined) environment.ComSpec = process.env.ComSpec
+    if (environment.SystemRoot === undefined && process.env.SystemRoot !== undefined) environment.SystemRoot = process.env.SystemRoot
+  }
   if (platform === 'win32') {
     for (const key of Object.keys(environment)) {
       if (key.toUpperCase() === 'PATH') delete environment[key]
