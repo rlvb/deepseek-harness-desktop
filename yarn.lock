@@ -8488,12 +8488,12 @@ __metadata:
 
 "dsh-sub2api@file:../../dsh-sub2api::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
   version: 0.1.0
-  resolution: "dsh-sub2api@file:../../dsh-sub2api#../../dsh-sub2api::hash=d80573&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+  resolution: "dsh-sub2api@file:../../dsh-sub2api#../../dsh-sub2api::hash=8de3f0&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
   peerDependencies:
     react: 18.3.1
   bin:
     dsh-sub2api: ./index.mjs
-  checksum: 10c0/dc55d33f67d5f8da24864332ecb0d4ade097b12d6d8e56ef39e5983c9a4263be0b09362fba0e47b966ef7eb774649a72fe1949f84354a148115ece118a55d070
+  checksum: 10c0/4da23d6483b985a49c684917f40898123aaff06b362b56cd40ecf10bbe9f71254b9cad513df9c7666fbc1d8db939c97e19ddfd50955b4f42f2d86c072ad56d3e
   languageName: node
   linkType: hard
 

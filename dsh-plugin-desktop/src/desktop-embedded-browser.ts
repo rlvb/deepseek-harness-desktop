@@ -16,6 +16,8 @@ export interface DesktopEmbeddedBrowserLoginResult {
   readonly storage: Readonly<Record<string, string>>
   readonly userAgent: string
   readonly finalUrl: string
+  /** Cookies applicable to the Sub2API API session, serialized for Node fetch. */
+  readonly cookieHeader: string
 }
 
 export interface DesktopEmbeddedBrowser {
@@ -166,7 +168,7 @@ export class DesktopEmbeddedBrowserService implements DesktopEmbeddedBrowser {
       if (!window.isDestroyed()) window.destroy()
     }
     try {
-      await window.webContents.session.clearStorageData({ origin: loginUrl.origin, storages: ['localstorage'] })
+      await window.webContents.session.clearStorageData({ origin: loginUrl.origin, storages: ['localstorage', 'cookies'] })
       await window.loadURL(loginUrl.href)
       const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
       let finalUrl = loginUrl.href
@@ -179,10 +181,14 @@ export class DesktopEmbeddedBrowserService implements DesktopEmbeddedBrowser {
           )
           const storage = parseStorage(raw, options.storageKeys)
           if (hasAuthValue(storage)) {
+            const cookies = await window.webContents.session.cookies.get({
+              url: new URL('/api/v1/auth/me', loginUrl.origin).href,
+            })
             return Object.freeze({
               storage,
               userAgent: chromeLikeUserAgent,
               finalUrl,
+              cookieHeader: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; '),
             })
           }
         } catch {
