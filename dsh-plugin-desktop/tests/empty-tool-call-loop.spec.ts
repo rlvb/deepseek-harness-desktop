@@ -10,6 +10,7 @@ type ExecuteToolCalls = (
   ctx: {
     agents: { requireInitiator(): { session: SessionRecorder } }
     tools: {
+      get?: (name: string, scope?: unknown) => { parameters?: unknown } | undefined
       executionMode(exec: unknown): { kind: 'exclusive' | 'parallel' }
       [TOOL_RUNTIME_SCHEDULER]: {
         prepare(exec: unknown): Promise<unknown>
@@ -158,6 +159,91 @@ describe('empty tool-call handling', () => {
           content: [{
             content: [{
               text: expect.stringContaining('Start a new session'),
+            }],
+          }],
+        },
+      },
+    })
+  })
+  it('prevents missing required arguments from dispatching, allows one repair, then trips the turn circuit breaker', async () => {
+    const executeToolCalls = await loadExecuteToolCalls()
+    const session = new SessionRecorder()
+    const prepare = vi.fn()
+    const dispatch = vi.fn()
+    const finalize = vi.fn()
+    const finish = vi.fn((_exec: unknown, result: unknown) => result)
+    const definition = {
+      parameters: {
+        type: 'object',
+        properties: { file_path: { type: 'string' } },
+        required: ['file_path'],
+        additionalProperties: false,
+      },
+    }
+    const context = {
+      agents: {
+        requireInitiator: () => ({ session }),
+      },
+      tools: {
+        get: () => definition,
+        executionMode: () => ({ kind: 'exclusive' as const }),
+        [TOOL_RUNTIME_SCHEDULER]: {
+          prepare,
+          dispatch,
+          finalize,
+          finish,
+        },
+      },
+      agentLoop: {
+        config: { maxParallelToolCalls: 1 },
+      },
+    }
+    const call = {
+      id: 'call-read-file',
+      name: 'read_file',
+      arguments: '{}',
+    }
+
+    await expect(executeToolCalls(
+      context,
+      2,
+      1,
+      [call],
+      new AbortController().signal,
+      () => {},
+    )).resolves.toEqual({ concluded: false })
+    expect(prepare).not.toHaveBeenCalled()
+    expect(session.events).toHaveLength(2)
+    expect(session.events[1]).toMatchObject({
+      type: 'tool/result',
+      data: {
+        message: {
+          content: [{
+            content: [{
+              text: expect.stringContaining('file_path'),
+            }],
+          }],
+        },
+      },
+    })
+
+    await expect(executeToolCalls(
+      context,
+      2,
+      2,
+      [call],
+      new AbortController().signal,
+      () => {},
+    )).resolves.toEqual({ concluded: true })
+    expect(prepare).not.toHaveBeenCalled()
+    expect(session.events).toHaveLength(4)
+    expect(session.events[3]).toMatchObject({
+      type: 'tool/result',
+      data: {
+        message: {
+          content: [{
+            content: [{
+              text: expect.stringContaining('after 1 repair attempt'),
             }],
           }],
         },

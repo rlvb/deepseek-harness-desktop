@@ -1060,7 +1060,7 @@ __metadata:
 
 "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@npm%3A0.1.1-rc.2#./patches/dsh-agent-loop@0.1.1-rc.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.1-rc.2
-  resolution: "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@npm%3A0.1.1-rc.2#./patches/dsh-agent-loop@0.1.1-rc.2.patch::version=0.1.1-rc.2&hash=9cb58e&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@npm%3A0.1.1-rc.2#./patches/dsh-agent-loop@0.1.1-rc.2.patch::version=0.1.1-rc.2&hash=e37ce5&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     "@deepseek-ai/schemastery": "npm:^3.18.1"
   peerDependencies:
@@ -1074,7 +1074,7 @@ __metadata:
     "@deepseek-ai/dsh-settings": ^0.1.1-rc.2
     "@deepseek-ai/dsh-system-prompt": ^0.1.1-rc.2
     "@deepseek-ai/dsh-tools": ^0.1.1-rc.2
-  checksum: 10c0/18ea15dd060316465282b70df1d0e042a7c8e9bb8ae2f8092f28114a33762c6a749965546970ca859f685099b75709c2eed9f388192ac1cff34a28567c193959
+  checksum: 10c0/4c9257bc83ff67b333847aaff0b27441bbe863f75ba90ba428498660b3ae449c9ceea489fe065f64a65dea6bce968ea3c5e9b32d29d8b84ac02a412748fc8115
   languageName: node
   linkType: hard
 
@@ -7128,7 +7128,7 @@ __metadata:
 
 "@xmanrui/dsh-im@file:../../dsh-im::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
   version: 3.0.6
-  resolution: "@xmanrui/dsh-im@file:../../dsh-im#../../dsh-im::hash=a9deaf&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+  resolution: "@xmanrui/dsh-im@file:../../dsh-im#../../dsh-im::hash=36e461&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
   dependencies:
     "@tencent-connect/qqbot-connector": "npm:1.2.0"
     "@tencent-connect/qqbot-nodejs": "npm:1.0.4"
@@ -7137,7 +7137,7 @@ __metadata:
     qrcode: "npm:1.5.4"
   bin:
     dsh-im: bin/dsh-im.mjs
-  checksum: 10c0/6c1c219f7dd21ae844f3d3bb8de67f17d20c28bc9f98aa474efe2b8393301b70b8bce74bf3cbcf69f2b0fb02595f634db44806f6461cb364fafd146b897acaac
+  checksum: 10c0/5c3ad94d1e8116a95a85d613577886646c194f450ac2da8fd55e9a4b1a49a417573a73aeb6fcb8087aee97904150fe785115777f4aa37ec50ef37489afcc316c
   languageName: node
   linkType: hard
 
