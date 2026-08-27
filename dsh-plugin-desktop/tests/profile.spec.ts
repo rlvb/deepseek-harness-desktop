@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { composeEntries, initProfile, PROFILE_TEMPLATES } from '@deepseek-ai/dsh-app-boot'
 import {
   DESKTOP_PACKAGE_NAME,
+  DSH_IM_PACKAGE,
   DSH_SUB2API_PACKAGE,
   desktopShellModeFromSettings,
   desktopStartupSettingsFromSettings,
@@ -119,6 +120,7 @@ describe('desktop profile composition', {
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
       DSH_SUB2API_PACKAGE,
+      DSH_IM_PACKAGE,
       'third-party-one',
       'third-party-two',
     ])
@@ -146,6 +148,7 @@ describe('desktop profile composition', {
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
       DSH_SUB2API_PACKAGE,
+      DSH_IM_PACKAGE,
       'third-party-plugin',
     ])
     expect(repaired.dependencies).toEqual({ 'third-party-plugin': '^1.2.3' })
@@ -178,6 +181,7 @@ describe('desktop profile composition', {
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
       DSH_SUB2API_PACKAGE,
+      DSH_IM_PACKAGE,
     ])
   })
 

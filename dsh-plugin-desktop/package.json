@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-desktop",
-  "version": "2.0.12",
+  "version": "2.0.13",
   "description": "DSH Desktop: an Electron shell composed as a DeepSeek Harness Cordis plugin",
   "license": "MIT",
   "publishConfig": {
@@ -243,6 +243,7 @@
     "@deepseek-ai/dsh-web-app": "0.1.1-rc.2",
     "@deepseek-ai/dsh-workflow": "0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1",
+    "@xmanrui/dsh-im": "file:../../dsh-im",
     "adm-zip": "^0.6.0",
     "dsh-community-market": "0.1.0-dev.0",
     "dsh-sub2api": "file:../../dsh-sub2api",
