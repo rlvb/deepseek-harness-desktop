@@ -18,6 +18,11 @@ import { fileURLToPath } from 'node:url'
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const rootManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
 
+/** Normalize common legacy package.json license spellings before checking. */
+const LICENSE_ALIASES = new Map([
+  ["Apache 2.0", "Apache-2.0"],
+])
+
 /** Licenses accepted for redistribution inside the desktop installers. */
 const ALLOWED_LICENSES = new Set([
   'MIT',
@@ -65,14 +70,19 @@ function resolvePackageManifest(name, fromManifestPath) {
   return undefined
 }
 
+/** Normalize legacy package.json license spellings. */
+function normalizeLicense(value) {
+  return LICENSE_ALIASES.get(value) ?? value
+}
+
 /** Normalize the license field of one package manifest. */
 function licenseExpression(manifest) {
   const value = manifest.license
-  if (typeof value === 'string') return value
-  if (typeof value === 'object' && value !== null && typeof value.type === 'string') return value.type
+  if (typeof value === 'string') return normalizeLicense(value)
+  if (typeof value === 'object' && value !== null && typeof value.type === 'string') return normalizeLicense(value.type)
   if (Array.isArray(manifest.licenses)) {
     return manifest.licenses
-      .map((item) => (typeof item === 'string' ? item : item.type))
+      .map((item) => normalizeLicense(typeof item === 'string' ? item : item.type))
       .filter(Boolean)
       .join(' OR ')
   }

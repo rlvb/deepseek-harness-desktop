@@ -549,4 +549,12 @@ the package names, versions, and licenses for transparency.
 | zod-to-json-schema | 3.25.2 | ISC |
 | zustand | 4.4.7 | MIT |
 | zwitch | 2.0.4 | MIT |
+| @tencent-connect/qqbot-connector | 1.2.0 | UNLICENSED |
+| @tencent-connect/qqbot-nodejs | 1.0.4 | MIT |
+| @wecom/aibot-node-sdk | 1.0.7 | MIT |
+| @xmanrui/dsh-im | 3.0.6 | MIT |
+| dingtalk-stream | 2.1.4 | MIT |
+| qrcode | 1.5.4 | MIT |
+| qrcode-terminal | 0.12.0 | Apache 2.0 |
+> Release review: @tencent-connect/qqbot-connector@1.2.0 declares UNLICENSED and has no license file. It is included for the optional QQ QR-login channel. This build is for internal enterprise validation only; obtain redistribution permission before external distribution. The license verifier intentionally blocks this dependency until approved.
 > Notice-required licenses in use: LGPL-3.0-or-later. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
