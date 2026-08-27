@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import {
   createDesktopBrowserAccess,
+  desktopRendererWebSocketProtocol,
   type DesktopBrowserAccess,
 } from '../src/desktop-browser-access.ts'
 import DesktopWebServer from '../src/webserver.ts'
@@ -128,6 +129,11 @@ describe('Desktop WebServer browser gate', () => {
     })
     expect(exact.status).toBe(200)
     await expect(exact.text()).resolves.toBe('private')
+    const internal = server.createInternalHarnessTransport()
+    if (internal === undefined) throw new Error('internal Harness transport was not created')
+    const internalResponse = await internal.fetchImpl(`${root}/api/private`)
+    expect(internalResponse.status).toBe(200)
+    await expect(internalResponse.text()).resolves.toBe('private')
     const fallback = await fetch(`${root}/assets/app.js`, {
       headers: { [access.rendererHeader.name]: access.rendererHeader.value },
     })
@@ -168,6 +174,9 @@ describe('Desktop WebServer browser gate', () => {
     await expect(requestUpgrade(server.port, '/socket')).resolves.toContain('403 Forbidden')
     await expect(requestUpgrade(server.port, '/socket', {
       [access.rendererHeader.name]: access.rendererHeader.value,
+    })).resolves.toContain('101 Switching Protocols')
+    await expect(requestUpgrade(server.port, '/socket', {
+      'sec-websocket-protocol': desktopRendererWebSocketProtocol(access),
     })).resolves.toContain('101 Switching Protocols')
   })
 })

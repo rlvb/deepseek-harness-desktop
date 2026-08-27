@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createDesktopBrowserAccess,
   decideDesktopBrowserAccess,
+  desktopRendererWebSocketProtocol,
   DESKTOP_RENDERER_ACCESS_HEADER,
   desktopBrowserUrlHasRendererMarkers,
 } from '../src/desktop-browser-access.ts'
@@ -30,6 +31,10 @@ describe('Desktop browser access policy', () => {
     expect(decideDesktopBrowserAccess(access, {
       headers: { [DESKTOP_RENDERER_ACCESS_HEADER]: RENDERER_TOKEN },
       url: '/?dsh-desktop-mode=compatibility',
+    })).toBe('renderer')
+    expect(decideDesktopBrowserAccess(access, {
+      headers: { 'sec-websocket-protocol': desktopRendererWebSocketProtocol(access) },
+      url: '/',
     })).toBe('renderer')
     expect(decideDesktopBrowserAccess(access, {
       headers: { [DESKTOP_RENDERER_ACCESS_HEADER]: `${RENDERER_TOKEN}x` },

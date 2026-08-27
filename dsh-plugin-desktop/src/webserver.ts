@@ -8,7 +8,10 @@ import WebServer, {
   type WebRoute,
   type WebUpgradeRoute,
 } from '@deepseek-ai/dsh-host-webserver'
-import { decideDesktopBrowserAccess } from './desktop-browser-access.ts'
+import {
+  decideDesktopBrowserAccess,
+  desktopRendererWebSocketProtocol,
+} from './desktop-browser-access.ts'
 import { DESKTOP_WEB_PORT_RETRY_LIMIT } from './desktop-port.ts'
 
 function isAddressInUse(cause: unknown): boolean {
@@ -64,6 +67,36 @@ export class DesktopWebServer extends WebServer {
     // The Desktop-owned server remains usable in an ordinary `dsh` launch,
     // where the Electron launcher capability is intentionally absent.
     return access === undefined || decideDesktopBrowserAccess(access, request) !== 'denied'
+  }
+
+  /**
+   * Give Host-side plugins a generation-scoped transport for this server.
+   *
+   * Desktop intentionally blocks marker-free browser traffic in advanced mode.
+   * The bundled plugins still need to call the same in-process Harness API, so
+   * they use the same ephemeral capability as the Electron renderer instead of
+   * being mistaken for an ordinary browser.
+   */
+  createInternalHarnessTransport(): {
+    fetchImpl: typeof fetch
+    createWebSocket: (url: string) => WebSocket
+  } | undefined {
+    const access = this.ctx.get('desktopBrowserAccess')
+    if (access === undefined) return undefined
+    const { name, value } = access.rendererHeader
+    const fetchImpl: typeof fetch = (input, init) => {
+      const headers = new Headers(input instanceof Request ? input.headers : undefined)
+      for (const [headerName, headerValue] of new Headers(init?.headers)) {
+        headers.set(headerName, headerValue)
+      }
+      headers.set(name, value)
+      return fetch(input, { ...init, headers })
+    }
+    const protocol = desktopRendererWebSocketProtocol(access)
+    return Object.freeze({
+      fetchImpl,
+      createWebSocket: (url: string) => new WebSocket(url, protocol),
+    })
   }
 
   override register(route: WebRoute): () => void {

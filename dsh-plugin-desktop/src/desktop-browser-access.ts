@@ -5,6 +5,8 @@ import type { IncomingHttpHeaders } from 'node:http'
 
 /** Header attached only by the Electron renderer's native network session. */
 export const DESKTOP_RENDERER_ACCESS_HEADER = 'x-dsh-desktop-renderer'
+/** WebSocket subprotocol used by trusted Host-side clients. */
+export const DESKTOP_INTERNAL_WEBSOCKET_PROTOCOL_PREFIX = 'dsh-desktop-internal-'
 
 const ACCESS_TOKEN_BYTES = 32
 const ACCESS_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/u
@@ -47,6 +49,11 @@ export function createDesktopBrowserAccess(
   })
 }
 
+/** Create the generation-scoped WebSocket capability for an internal client. */
+export function desktopRendererWebSocketProtocol(access: DesktopBrowserAccess): string {
+  return `${DESKTOP_INTERNAL_WEBSOCKET_PROTOCOL_PREFIX}${access.rendererHeader.value}`
+}
+
 function exactHeaderValue(headers: IncomingHttpHeaders): string | undefined {
   const value = headers[DESKTOP_RENDERER_ACCESS_HEADER]
   return typeof value === 'string' ? value : undefined
@@ -55,6 +62,20 @@ function exactHeaderValue(headers: IncomingHttpHeaders): string | undefined {
 function sameToken(actual: string | undefined, expected: string): boolean {
   if (actual === undefined || !ACCESS_TOKEN_PATTERN.test(actual) || actual.length !== expected.length) return false
   return timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
+}
+
+function websocketProtocolToken(headers: IncomingHttpHeaders): string | undefined {
+  const value = headers['sec-websocket-protocol']
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
+  for (const raw of values) {
+    for (const protocol of raw.split(',')) {
+      const trimmed = protocol.trim()
+      if (trimmed.startsWith(DESKTOP_INTERNAL_WEBSOCKET_PROTOCOL_PREFIX)) {
+        return trimmed.slice(DESKTOP_INTERNAL_WEBSOCKET_PROTOCOL_PREFIX.length)
+      }
+    }
+  }
+  return undefined
 }
 
 /** Whether an uncredentialed URL is attempting to activate Desktop-only client effects. */
@@ -73,7 +94,10 @@ export function decideDesktopBrowserAccess(
   access: DesktopBrowserAccess,
   request: { readonly headers: IncomingHttpHeaders; readonly url?: string | undefined },
 ): DesktopBrowserAccessDecision {
-  if (sameToken(exactHeaderValue(request.headers), access.rendererHeader.value)) return 'renderer'
+  if (sameToken(exactHeaderValue(request.headers), access.rendererHeader.value)
+    || sameToken(websocketProtocolToken(request.headers), access.rendererHeader.value)) {
+    return 'renderer'
+  }
   if (!access.ordinaryBrowserEnabled || desktopBrowserUrlHasRendererMarkers(request.url)) return 'denied'
   return 'browser'
 }
