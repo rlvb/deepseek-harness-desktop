@@ -246,6 +246,7 @@
     "@xmanrui/dsh-im": "file:../../dsh-im",
     "adm-zip": "^0.6.0",
     "dsh-community-market": "0.1.0-dev.0",
+    "dsh-search-plugin": "file:../../dsh-search-plugin",
     "dsh-sub2api": "file:../../dsh-sub2api",
     "dshmarket": "1.17.1",
     "koffi": "3.1.5",

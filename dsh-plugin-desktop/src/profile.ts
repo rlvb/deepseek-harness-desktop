@@ -70,6 +70,9 @@ export const DSH_SUB2API_PACKAGE = 'dsh-sub2api'
 /** Built-in IM connector bundle inserted into every Desktop profile. */
 export const DSH_IM_PACKAGE = '@xmanrui/dsh-im'
 
+/** Enterprise Web Search provider bundle inserted into every Desktop profile. */
+export const DSH_WEB_SEARCH_PACKAGE = 'dsh-search-plugin'
+
 /** Empty include root rewritten before every profile boot. */
 export const DESKTOP_PROFILE_ROOT = 'cordis.yml'
 
@@ -294,8 +297,9 @@ export function desktopBundleList(current: readonly string[]): string[] {
     && name !== DESKTOP_PACKAGE_NAME
     && name !== DSH_SUB2API_PACKAGE
     && name !== DSH_IM_PACKAGE
+    && name !== DSH_WEB_SEARCH_PACKAGE
     && !OBSOLETE_DESKTOP_BUNDLE_SET.has(name))
-  return [...REQUIRED_BUNDLES, DSH_SUB2API_PACKAGE, DSH_IM_PACKAGE, ...thirdParty]
+  return [...REQUIRED_BUNDLES, DSH_SUB2API_PACKAGE, DSH_IM_PACKAGE, DSH_WEB_SEARCH_PACKAGE, ...thirdParty]
 }
 
 /** Return whether two ordered string lists are identical. */

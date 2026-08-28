@@ -42,6 +42,7 @@ const IMMUTABLE_BUNDLES = new Set([
   'dsh-community-market',
   'dsh-sub2api',
   '@xmanrui/dsh-im',
+  'dsh-search-plugin',
 ])
 
 /** One direct bundle declared by the active profile. */

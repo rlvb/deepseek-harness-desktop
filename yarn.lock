@@ -8765,6 +8765,7 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
     dsh-community-market: "npm:0.1.0-dev.0"
+    dsh-search-plugin: "file:../../dsh-search-plugin"
     dsh-sub2api: "file:../../dsh-sub2api"
     dshmarket: "npm:1.17.1"
     electron: "npm:43.4.0"
@@ -8795,6 +8796,13 @@ __metadata:
     dsh-plugin-desktop: lib/bin.js
   languageName: unknown
   linkType: soft
+
+"dsh-search-plugin@file:../../dsh-search-plugin::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
+  version: 0.1.0
+  resolution: "dsh-search-plugin@file:../../dsh-search-plugin#../../dsh-search-plugin::hash=1886a8&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+  checksum: 10c0/a9fa5c9a75fdc95b58f36debc7c95c4debb5d0b052d73a10256aeaa518a1f14b50b73136c6979af5302124033c595fb5a29259de985d9751ec92cc8e800a5878
+  languageName: node
+  linkType: hard
 
 "dsh-sub2api@file:../../dsh-sub2api::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
   version: 0.1.0

@@ -130,6 +130,8 @@ export const REQUIRED_UNPACKED_PACKAGE_SPECIFIERS = [
   'dsh-plugin-desktop/package.json',
   'dsh-sub2api',
   'dsh-sub2api/package.json',
+  'dsh-search-plugin',
+  'dsh-search-plugin/package.json',
   '@deepseek-ai/dsh-base/package.json',
   '@deepseek-ai/schemastery/package.json',
   '@deepseek-ai/dsh-web-app/package.json',
