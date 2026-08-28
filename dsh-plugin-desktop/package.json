@@ -318,7 +318,9 @@
       "cordis.patch.yml",
       "lib/**",
       "package.json",
-      "!node_modules/node-pty/build/**"
+      "!node_modules/node-pty/build/**",
+      "!node_modules/dsh-search-plugin/cordis.patch.public.yml",
+    "!node_modules/dsh-search-plugin/README.DSH-INTEGRATION.md"
     ],
     "mac": {
       "target": [
