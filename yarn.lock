@@ -8799,8 +8799,8 @@ __metadata:
 
 "dsh-search-plugin@file:../../dsh-search-plugin::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
   version: 0.1.0
-  resolution: "dsh-search-plugin@file:../../dsh-search-plugin#../../dsh-search-plugin::hash=1886a8&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
-  checksum: 10c0/a9fa5c9a75fdc95b58f36debc7c95c4debb5d0b052d73a10256aeaa518a1f14b50b73136c6979af5302124033c595fb5a29259de985d9751ec92cc8e800a5878
+  resolution: "dsh-search-plugin@file:../../dsh-search-plugin#../../dsh-search-plugin::hash=9049f6&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+  checksum: 10c0/9b8b7058418144d964988c4f445e6979fd72ba47fffd023ac638e0a15cc91bb19c652600e28c55e67aca253c757cbfc5013e58d24376377e8ade10332064ba42
   languageName: node
   linkType: hard
 
