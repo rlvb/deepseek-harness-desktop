@@ -778,6 +778,8 @@ describe('published package surface', () => {
       'lib/**',
       'package.json',
       '!node_modules/node-pty/build/**',
+      '!node_modules/dsh-search-plugin/cordis.patch.public.yml',
+      '!node_modules/dsh-search-plugin/README.DSH-INTEGRATION.md',
     ])
     expect(manifest.build?.mac?.icon).toBe('build/app-icon-mac.png')
     expect(manifest.build?.mac?.mergeASARs).toBe(false)
