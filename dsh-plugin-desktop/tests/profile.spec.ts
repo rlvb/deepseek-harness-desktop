@@ -602,6 +602,7 @@ virtualStoreDirMaxLength: 60
     const rows = composeEntries([prepared.patches])
 
     expect(prepared.profile.name).toBe('web')
+    expect(prepared.profile.layers.map(layer => layer.packageName)).toContain(DSH_WEB_SEARCH_PACKAGE)
     expect(rows.find(row => row.id === 'ui-layout')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-client-ui-layout',
       disabled: true,

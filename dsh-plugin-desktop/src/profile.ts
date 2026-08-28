@@ -478,6 +478,12 @@ function loadRecoveryFilteredProfile(
     && (marketProvider === DESKTOP_MARKET_IDENTITIES.dshMarket.provider
       || packageName !== DESKTOP_MARKET_IDENTITIES.dshMarket.packageName),
   )
+  // Enterprise web search is launcher-managed, so existing/custom Web profiles
+  // receive it even when their persisted manifest predates the integration.
+  if (selectedBundles.includes('@deepseek-ai/dsh-web-app')
+    && !selectedBundles.includes(DSH_WEB_SEARCH_PACKAGE)) {
+    selectedBundles.push(DSH_WEB_SEARCH_PACKAGE)
+  }
   if (marketProvider === DESKTOP_MARKET_IDENTITIES.dshMarket.provider
     && !selectedBundles.includes(DESKTOP_MARKET_IDENTITIES.dshMarket.packageName)) {
     selectedBundles.push(DESKTOP_MARKET_IDENTITIES.dshMarket.packageName)
