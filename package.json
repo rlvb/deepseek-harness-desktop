@@ -83,7 +83,7 @@
     "@deepseek-ai/dsh-goal-round-driver": "file:vendor/dsh-runtime/0.1.2-alpha.1/deepseek-ai-dsh-goal-round-driver-0.1.2-alpha.1.tgz",
     "@deepseek-ai/dsh-jobs": "file:vendor/dsh-runtime/0.1.2-alpha.1/deepseek-ai-dsh-jobs-0.1.2-alpha.1.tgz",
     "@deepseek-ai/dsh-jobs-local": "file:vendor/dsh-runtime/0.1.2-alpha.1/deepseek-ai-dsh-jobs-local-0.1.2-alpha.1.tgz",
-    "@deepseek-ai/dsh-llm-deepseek": "file:vendor/dsh-runtime/0.1.2-alpha.1/deepseek-ai-dsh-llm-deepseek-0.1.2-alpha.1.tgz",
+    "@deepseek-ai/dsh-llm-deepseek": "patch:@deepseek-ai/dsh-llm-deepseek@file%3Avendor/dsh-runtime/0.1.2-alpha.1/deepseek-ai-dsh-llm-deepseek-0.1.2-alpha.1.tgz#./patches/dsh-llm-deepseek@0.1.2-alpha.1.patch",
     "@deepseek-ai/dsh-authorization": "file:vendor/dsh-runtime/0.1.2-alpha.1/deepseek-ai-dsh-authorization-0.1.2-alpha.1.tgz",
     "@deepseek-ai/dsh-llm-pi-ai": "file:vendor/dsh-runtime/0.1.2-alpha.1/deepseek-ai-dsh-llm-pi-ai-0.1.2-alpha.1.tgz",
     "@deepseek-ai/dsh-permission-presets": "file:vendor/dsh-runtime/0.1.2-alpha.1/deepseek-ai-dsh-permission-presets-0.1.2-alpha.1.tgz",

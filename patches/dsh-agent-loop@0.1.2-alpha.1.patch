@@ -23,7 +23,7 @@ index 411060b8cc..be48a21682 100644
 +const TOOL_ARGUMENT_REPAIR_LIMIT = 1;
 +const toolArgumentRepairStates = /* @__PURE__ */ new WeakMap();
 +function hasEmptyToolCallName(block) {
-+	return typeof block.name === "string" && block.name.trim() === "";
++	return typeof block.name !== "string" || block.name.trim() === "";
 +}
 +function toolArgumentRepairStateFor(session, turn) {
 +	const current = toolArgumentRepairStates.get(session);

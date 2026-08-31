@@ -1,0 +1,14 @@
+diff --git a/lib/index.js b/lib/index.js
+index 8c86237..8d89a69 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1285,7 +1285,8 @@ async function* translate(payloads) {
+ 					};
+ 				}
+ 				if (call.id !== void 0) block.callId = call.id;
+-				if (call.function?.name !== void 0) block.name = call.function.name;
++				const emittedName = call.function?.name;
++				if (typeof emittedName === "string" && emittedName.trim() !== "") block.name = emittedName;
+ 				const fragment = call.function?.arguments ?? "";
+ 				block.text += fragment;
+ 				yield {
