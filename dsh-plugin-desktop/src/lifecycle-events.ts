@@ -10,6 +10,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   unlinkSync,
   writeSync,
 } from 'node:fs'
@@ -123,6 +124,14 @@ export interface DesktopLifecycleRecorderOptions {
 
 export function desktopLifecycleEvidencePath(userDataDir: string): string {
   return join(userDataDir, EVIDENCE_DIRECTORY_NAME, EVIDENCE_FILENAME)
+}
+
+function writableLifecycleEvidenceOwner(userDataDir: string): string {
+  try {
+    return realpathSync.native(userDataDir)
+  } catch {
+    return userDataDir
+  }
 }
 
 export function createDesktopLifecycleRecorder(options: DesktopLifecycleRecorderOptions): DesktopLifecycleRecorder {
@@ -264,7 +273,7 @@ export class DesktopLifecycleRecorder {
 
   constructor(options: DesktopLifecycleRecorderOptions) {
     this.options = options
-    this.evidencePath = desktopLifecycleEvidencePath(options.userDataDir)
+    this.evidencePath = desktopLifecycleEvidencePath(writableLifecycleEvidenceOwner(options.userDataDir))
     this.now = options.now ?? (() => new Date())
     this.monotonicNow = options.monotonicNow ?? (() => performance.now())
     this.runId = validateId(options.randomId?.() ?? randomUUID(), 'runId')

@@ -1,0 +1,156 @@
+diff --git a/lib/index.js b/lib/index.js
+index 411060b8cc..be48a21682 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -7,7 +7,7 @@ import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-sett
+ import { SessionId, SessionPreparation, canonicalHeader, headerEquals, isReplacementSurfaceEvent } from "@deepseek-ai/dsh-session";
+ import { createScope } from "@deepseek-ai/dsh-scope";
+ import { joinContextSections, renderContextSections, renderPrompt } from "@deepseek-ai/dsh-system-prompt";
+-import { TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER } from "@deepseek-ai/dsh-tools";
++import { TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER, validateJsonSchemaValue } from "@deepseek-ai/dsh-tools";
+ //#region lib/types/runtime-context.js
+ /**
+ * Durable projection state for dynamic runtime context.
+@@ -114,25 +114,136 @@ var RuntimeContextProjection = class {
+ * @param signal - abort signal shared by the step.
+ * @param acceptContext - accepts committed result context for the next step boundary.
+ */
++const EMPTY_TOOL_NAME_ERROR = "assistant emitted a tool call with an empty tool name";
++const EMPTY_TOOL_NAME_RESULT = "Error: assistant emitted a tool call with an empty tool name. This usually means an upstream proxy or cached long session dropped tool_call.name/id. Start a new session or use the official DeepSeek API directly.";
++const EMPTY_TOOL_NAME_SKIPPED_ERROR = "tool call skipped after an earlier empty tool name";
++const EMPTY_TOOL_NAME_SKIPPED_RESULT = "Error: tool call skipped because an earlier tool call had an empty tool name";
++const TOOL_ARGUMENT_REPAIR_RESULT = "The model emitted arguments that do not satisfy the tool schema. Correct the JSON arguments and retry this tool once.";
++const TOOL_ARGUMENT_REPAIR_LIMIT = 1;
++const toolArgumentRepairStates = /* @__PURE__ */ new WeakMap();
++function hasEmptyToolCallName(block) {
++	return typeof block.name === "string" && block.name.trim() === "";
++}
++function toolArgumentRepairStateFor(session, turn) {
++	const current = toolArgumentRepairStates.get(session);
++	if (current?.turn === turn) return current;
++	const next = {
++		turn,
++		attemptedTools: /* @__PURE__ */ new Set()
++	};
++	toolArgumentRepairStates.set(session, next);
++	return next;
++}
++function invalidToolArgumentViolations(ctx, exec) {
++	const get = ctx.tools?.get;
++	if (typeof get !== "function") return;
++	let definition;
++	try {
++		definition = get.call(ctx.tools, exec.name, exec.agent);
++	} catch {
++		return;
++	}
++	if (!definition?.parameters) return;
++	try {
++		const violations = validateJsonSchemaValue(definition.parameters, exec.arguments, "arguments");
++		return violations.length > 0 ? violations : void 0;
++	} catch {
++		return;
++	}
++}
++function appendEmptyToolCallFailure(session, turn, step, block) {
++	const callSeq = appendToolCall(session, turn, step, block);
++	appendToolResult(session, turn, step, block, {
++		content: [{
++			type: "text",
++			text: EMPTY_TOOL_NAME_RESULT
++		}],
++		isError: true,
++		error: {
++			message: EMPTY_TOOL_NAME_ERROR
++		}
++	}, callSeq);
++}
++function appendToolCallSkippedAfterEmptyName(session, turn, step, block) {
++	const callSeq = appendToolCall(session, turn, step, block);
++	appendToolResult(session, turn, step, block, {
++		content: [{
++			type: "text",
++			text: EMPTY_TOOL_NAME_SKIPPED_RESULT
++		}],
++		isError: true,
++		error: {
++			message: EMPTY_TOOL_NAME_SKIPPED_ERROR
++		}
++	}, callSeq);
++}
++function appendInvalidToolArgumentsFailure(session, turn, step, block, violations, terminal) {
++	const detail = violations.slice(0, 8).join("; ");
++	const message = terminal ? `invalid arguments for tool "${block.name}" after ${TOOL_ARGUMENT_REPAIR_LIMIT} repair attempt; stopping further retries in this turn` : `invalid arguments for tool "${block.name}": ${detail}. ${TOOL_ARGUMENT_REPAIR_RESULT}`;
++	const callSeq = appendToolCall(session, turn, step, block);
++	appendToolResult(session, turn, step, block, {
++		content: [{
++			type: "text",
++			text: `Error: ${message}`
++		}],
++		isError: true,
++		error: {
++			message,
++			info: {
++				name: "ToolArgsError",
++				code: "INVALID_ARGS"
++			}
++		},
++		...terminal ? { concludesTurn: true } : {}
++	}, callSeq);
++}
+ async function executeToolCalls(ctx, turn, step, toolCalls, signal, acceptContext) {
+ 	const agent = ctx.agents.requireInitiator();
+ 	const { session } = agent;
+-	const planned = toolCalls.map((block) => ({
+-		block,
+-		exec: {
++	const repairState = toolArgumentRepairStateFor(session, turn);
++	const planned = toolCalls.map((block) => {
++		const exec = {
+ 			callId: block.id,
+ 			name: block.name,
+ 			arguments: parseArguments(block.arguments),
+ 			agent,
+ 			signal
+-		}
+-	}));
++		};
++		return {
++			block,
++			exec,
++			argumentViolations: invalidToolArgumentViolations(ctx, exec)
++		};
++	});
+ 	let next = 0;
+ 	let concluded = false;
+ 	while (next < planned.length) {
+ 		const first = planned[next];
++		if (hasEmptyToolCallName(first.block)) {
++			appendEmptyToolCallFailure(session, turn, step, first.block);
++			for (const call of planned.slice(next + 1)) appendToolCallSkippedAfterEmptyName(session, turn, step, call.block);
++			return { concluded: true };
++		}
++		if (first.argumentViolations !== void 0) {
++			const terminal = repairState.attemptedTools.has(first.block.name);
++			repairState.attemptedTools.add(first.block.name);
++			appendInvalidToolArgumentsFailure(session, turn, step, first.block, first.argumentViolations, terminal);
++			next++;
++			if (terminal) {
++				for (const call of planned.slice(next)) appendSkippedToolCall(session, turn, step, call.block);
++				return { concluded: true };
++			}
++			continue;
++		}
+ 		const mode = ctx.tools.executionMode(first.exec).kind;
+-		const outcome = await runGroup(ctx, turn, step, mode === "parallel" ? planned.slice(next) : [first], mode, signal, acceptContext);
++		const group = [first];
++		if (mode === "parallel") while (next + group.length < planned.length) {
++			const candidate = planned[next + group.length];
++			if (hasEmptyToolCallName(candidate.block)) break;
++			if (candidate.argumentViolations !== void 0) break;
++			group.push(candidate);
++		}
++		const outcome = await runGroup(ctx, turn, step, group, mode, signal, acceptContext);
+ 		next += outcome.consumed;
+ 		concluded ||= outcome.concluded;
+ 		if (outcome.aborted) {

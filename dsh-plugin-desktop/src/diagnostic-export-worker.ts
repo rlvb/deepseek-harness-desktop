@@ -10,6 +10,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   type Stats,
   unlinkSync,
@@ -71,7 +72,20 @@ function regularEvidenceEntry(path: string, name: string, ownerDir: string): Log
   try {
     const stats = lstatSync(path)
     if (stats.isSymbolicLink() || !stats.isFile() || hasLinkedParent(path, ownerDir)) return undefined
-    return { name, path, stats }
+
+    // Windows may report different file identities when a worker opens a path
+    // through a junction ancestor. Canonicalize only after rejecting links
+    // inside the owned tree, then prove the canonical file remains contained.
+    const canonicalOwner = realpathSync.native(ownerDir)
+    const canonicalPath = realpathSync.native(path)
+    const canonicalRelative = relative(canonicalOwner, canonicalPath)
+    if (canonicalRelative === '..' || canonicalRelative.startsWith(`..${sep}`) || isAbsolute(canonicalRelative)) {
+      return undefined
+    }
+    const canonicalStats = lstatSync(canonicalPath)
+    return !canonicalStats.isSymbolicLink() && canonicalStats.isFile()
+      ? { name, path: canonicalPath, stats: canonicalStats }
+      : undefined
   } catch (cause) {
     if (skippableFileError(cause)) return undefined
     throw cause
@@ -169,7 +183,9 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
   if (logsStats.isSymbolicLink() || !logsStats.isDirectory()) {
     throw new Error('dsh-plugin-desktop: refusing linked log directory')
   }
-  const outDir = join(data.userDataDir, 'diagnostics')
+  // Windows workers may reject mkdir through an otherwise readable junction ancestor.
+  // Resolve only the output owner; evidence containment keeps the caller-visible path.
+  const outDir = join(realpathSync.native(data.userDataDir), 'diagnostics')
   mkdirSync(outDir, { recursive: true })
   const outputStats = lstatSync(outDir)
   if (outputStats.isSymbolicLink() || !outputStats.isDirectory()) {

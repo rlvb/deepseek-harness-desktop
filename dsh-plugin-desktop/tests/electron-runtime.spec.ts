@@ -7,7 +7,6 @@ import { DESKTOP_FRAME_HEIGHT } from '../src/window-chrome.ts'
 
 const terminal = vi.hoisted(() => ({ open: vi.fn() }))
 const diagnostics = vi.hoisted(() => ({ export: vi.fn() }))
-const windowsAcrylic = vi.hoisted(() => ({ set: vi.fn(() => true) }))
 const updater = vi.hoisted(() => ({
   download: vi.fn(),
   filename: vi.fn(),
@@ -60,9 +59,6 @@ vi.mock('../src/diagnostic-export.ts', () => ({
   exportDesktopDiagnostics: diagnostics.export,
 }))
 
-vi.mock('../src/windows-acrylic.ts', () => ({
-  setWindowsAcrylic: windowsAcrylic.set,
-}))
 
 vi.mock('../src/update-download.ts', () => ({
   desktopUpdateFilename: updater.filename,
@@ -85,6 +81,7 @@ const electron = vi.hoisted(() => {
   const browserWindowOff = vi.fn()
   const loadURL = vi.fn(async (_url: string) => {})
   const webRequest = { onBeforeSendHeaders: vi.fn() }
+  const sessionFetch = vi.fn()
   const applicationMenuTemplates: unknown[][] = []
   const menuTemplates: unknown[][] = []
   const notifications: Notification[] = []
@@ -110,7 +107,7 @@ const electron = vi.hoisted(() => {
   }
   const webContents = {
     id: 73,
-    session: { webRequest },
+    session: { fetch: sessionFetch, webRequest },
     closeDevTools: vi.fn(() => { devToolsOpened = false }),
     executeJavaScript: vi.fn(async (_code: string, _userGesture?: boolean) => null as string | null),
     getZoomLevel: vi.fn(() => zoomLevel),
@@ -218,6 +215,7 @@ const electron = vi.hoisted(() => {
     browserWindowOff,
     browserWindowOn,
     loadURL,
+    sessionFetch,
     dialog,
     Menu: {
       buildFromTemplate: vi.fn((template: unknown[]) => {
@@ -287,13 +285,14 @@ vi.mock('electron', () => ({
 const spec: DesktopShellSpec = {
   mode: 'compatibility',
   macosMaterial: 'transparent',
-  windowsMaterial: 'acrylic',
+  windowsMaterial: 'off',
   material: 'off',
   width: 1280,
   height: 840,
   minWidth: 900,
   minHeight: 640,
   url: 'http://127.0.0.1:43120/',
+  authenticationUrl: 'http://127.0.0.1:43120/?token=test-token',
   rendererAccessHeader: {
     name: 'x-dsh-desktop-renderer',
     value: Buffer.alloc(32, 9).toString('base64url'),
@@ -336,10 +335,10 @@ describe('Electron desktop runtime', () => {
     updater.resolve.mockReset()
     updater.resolve.mockResolvedValue(undefined)
     diagnostics.export.mockReset()
-    windowsAcrylic.set.mockReset()
-    windowsAcrylic.set.mockReturnValue(true)
     electron.loadURL.mockReset()
     electron.loadURL.mockResolvedValue(undefined)
+    electron.sessionFetch.mockReset()
+    electron.sessionFetch.mockResolvedValue(new Response(null, { status: 200 }))
     electron.app.getPreferredSystemLanguages.mockReturnValue(['en-US'])
     electron.dialog.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
     electron.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
@@ -422,10 +421,22 @@ describe('Electron desktop runtime', () => {
 
     await runtime.mountScheduled()
 
+    expect(electron.sessionFetch).toHaveBeenNthCalledWith(1, spec.authenticationUrl, {
+      method: 'GET',
+      credentials: 'include',
+      redirect: 'follow',
+      cache: 'no-store',
+      headers: {
+        [spec.rendererAccessHeader.name]: spec.rendererAccessHeader.value,
+      },
+    })
+    expect(electron.sessionFetch).toHaveBeenCalledTimes(1)
     const registration = electron.webRequest.onBeforeSendHeaders.mock.calls
       .find(call => call.length === 2)
     expect(registration).toBeDefined()
     expect(registration?.[0]).toEqual({ urls: ['<all_urls>'] })
+    expect(electron.sessionFetch.mock.invocationCallOrder[0])
+      .toBeLessThan(electron.webRequest.onBeforeSendHeaders.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY)
     expect(electron.webRequest.onBeforeSendHeaders.mock.invocationCallOrder[0])
       .toBeLessThan(electron.loadURL.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY)
     const listener = registration?.[1] as (
@@ -647,6 +658,36 @@ describe('Electron desktop runtime', () => {
     }))
 
     await release()
+  })
+
+  it('fails closed before renderer load when the upstream token exchange is rejected', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    electron.sessionFetch.mockResolvedValueOnce(new Response(null, { status: 401 }))
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    runtime.schedule(spec)
+
+    await expect(runtime.mountScheduled()).rejects.toThrow(
+      'browser authentication failed with HTTP 401',
+    )
+    expect(electron.loadURL).not.toHaveBeenCalled()
+    expect(electron.webRequest.onBeforeSendHeaders).not.toHaveBeenCalled()
+    expect(electron.browserWindows[0]?.destroy).toHaveBeenCalledOnce()
+  })
+
+  it('fails closed when the authenticated redirect chain does not reach the Web root', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    electron.sessionFetch.mockResolvedValueOnce(new Response(null, { status: 503 }))
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    runtime.schedule(spec)
+
+    await expect(runtime.mountScheduled()).rejects.toThrow(
+      'browser authentication failed with HTTP 503',
+    )
+    expect(electron.loadURL).not.toHaveBeenCalled()
+    expect(electron.webRequest.onBeforeSendHeaders).not.toHaveBeenCalled()
+    expect(electron.browserWindows[0]?.destroy).toHaveBeenCalledOnce()
   })
 
   it('reloads the renderer and toggles Developer Tools only for a mounted generation', async () => {
@@ -2176,7 +2217,7 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
-  it('uses native acrylic for an extended Windows 10 window', async () => {
+  it('keeps an extended Windows 10 window opaque when material is off', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.nativeTheme.themeSource = 'light'
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
@@ -2184,7 +2225,7 @@ describe('Electron desktop runtime', () => {
     const release = runtime.schedule({
       ...spec,
       mode: 'extended',
-      material: 'acrylic',
+      material: 'off',
       windowsBuild: 19_045,
       readThemeSource: () => 'dark',
     })
@@ -2192,12 +2233,11 @@ describe('Electron desktop runtime', () => {
     await runtime.mountScheduled()
 
     expect(electron.browserWindowOptions[0]).toEqual(expect.objectContaining({
-      transparent: true,
+      backgroundColor: '#202124',
       titleBarOverlay: expect.objectContaining({ height: DESKTOP_FRAME_HEIGHT }),
     }))
+    expect(electron.browserWindowOptions[0]).not.toHaveProperty('transparent')
     expect(electron.browserWindowOptions[0]).not.toHaveProperty('backgroundMaterial')
-    expect(windowsAcrylic.set).toHaveBeenCalledOnce()
-    expect(windowsAcrylic.set).toHaveBeenCalledWith(electron.browserWindows[0], true, true)
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Switch to Enhanced Mode', enabled: true }),
     ]))
@@ -2205,7 +2245,7 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
-  it('uses the Windows 11 system Acrylic backdrop without the legacy transparent helper', async () => {
+  it('does not install a native backdrop when Windows material is off', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.nativeTheme.themeSource = 'light'
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
@@ -2213,7 +2253,7 @@ describe('Electron desktop runtime', () => {
     const release = runtime.schedule({
       ...spec,
       mode: 'extended',
-      material: 'acrylic',
+      material: 'off',
       windowsBuild: 22_621,
       readThemeSource: () => 'dark',
     })
@@ -2221,18 +2261,15 @@ describe('Electron desktop runtime', () => {
     await runtime.mountScheduled()
 
     expect(electron.browserWindowOptions[0]).toEqual(expect.objectContaining({
-      backgroundMaterial: 'acrylic',
+      backgroundColor: '#202124',
       roundedCorners: true,
       thickFrame: true,
     }))
     expect(electron.browserWindowOptions[0]).not.toHaveProperty('transparent')
-    expect(windowsAcrylic.set).not.toHaveBeenCalled()
-
     const window = electron.browserWindows[0]
     window?.setBackgroundMaterial.mockClear()
     runtime.setThemeSource('light')
-    expect(window?.setBackgroundMaterial).toHaveBeenCalledOnce()
-    expect(window?.setBackgroundMaterial).toHaveBeenCalledWith('acrylic')
+    expect(window?.setBackgroundMaterial).not.toHaveBeenCalled()
 
     await release()
   })

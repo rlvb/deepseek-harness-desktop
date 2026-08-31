@@ -17,11 +17,6 @@ import type { ElectronPlatformStrategy } from './electron-platform.ts'
 import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
-import {
-  windowsSupportsSystemBackdrop,
-  windowsUsesLegacyAcrylic,
-} from './window-material.ts'
-import { setWindowsAcrylic } from './windows-acrylic.ts'
 import type { DesktopRendererAccessHeader } from './desktop-browser-access.ts'
 import {
   fitMainWindowBounds,
@@ -40,6 +35,35 @@ function pairedWebSocketOrigin(origin: string): string {
   else if (url.protocol === 'https:') url.protocol = 'wss:'
   else throw new Error(`dsh-plugin-desktop: unsupported renderer origin protocol ${url.protocol}`)
   return url.origin
+}
+
+/**
+ * Exchange the upstream process token inside the BrowserWindow's own
+ * persistent session before its marker-bearing renderer URL is loaded.
+ * Keeping the exchange separate preserves the Desktop query markers across
+ * the upstream redirect and keeps the launch token out of renderer history.
+ */
+async function authenticateRendererSession(
+  window: BrowserWindow,
+  spec: DesktopShellSpec,
+): Promise<void> {
+  const session = window.webContents.session
+  const headers = {
+    [spec.rendererAccessHeader.name]: spec.rendererAccessHeader.value,
+  }
+  const authenticated = await session.fetch(spec.authenticationUrl, {
+    method: 'GET',
+    credentials: 'include',
+    redirect: 'follow',
+    cache: 'no-store',
+    headers,
+  })
+  if (authenticated.status !== 200) {
+    throw new Error(
+      `dsh-plugin-desktop: browser authentication failed with HTTP ${String(authenticated.status)}`,
+    )
+  }
+  await authenticated.body?.cancel()
 }
 
 function sameRendererCarrierOrigin(requestUrl: string, httpOrigin: string, webSocketOrigin: string): boolean {
@@ -195,20 +219,6 @@ export class ElectronShellGeneration {
     window.accessibleTitle = spec.windowTitle
     platform.configureWindow(window)
     const refreshNativeMaterial = (): void => {
-      if (platform.platform === 'win32'
-        && (spec.material === 'acrylic' || spec.material === 'mica')
-        && !windowsSupportsSystemBackdrop(spec.windowsBuild)) {
-        if (spec.material === 'acrylic' && windowsUsesLegacyAcrylic(spec.windowsBuild)) {
-          try {
-            if (!setWindowsAcrylic(window, true, nativeTheme.shouldUseDarkColors)) {
-              this.options.logError('dsh-plugin-desktop: Windows rejected the acrylic backdrop request')
-            }
-          } catch (cause) {
-            this.options.logError(`dsh-plugin-desktop: failed to apply Windows acrylic backdrop: ${cause instanceof Error ? cause.message : String(cause)}`)
-          }
-        }
-        return
-      }
       platform.refreshThemeMaterial(window, spec.material)
     }
     this.refreshNativeMaterial = refreshNativeMaterial
@@ -422,6 +432,7 @@ export class ElectronShellGeneration {
     }
 
     try {
+      await authenticateRendererSession(window, spec)
       removeRendererAccessHeader = installRendererAccessHeader(
         window,
         origin,

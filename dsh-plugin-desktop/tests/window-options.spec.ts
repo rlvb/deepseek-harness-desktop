@@ -18,13 +18,14 @@ import {
 const spec: DesktopShellSpec = {
   mode: 'compatibility',
   macosMaterial: 'transparent',
-  windowsMaterial: 'acrylic',
+  windowsMaterial: 'off',
   material: 'off',
   width: 1280,
   height: 840,
   minWidth: 900,
   minHeight: 640,
   url: 'http://127.0.0.1:43120/',
+  authenticationUrl: 'http://127.0.0.1:43120/?token=test-token',
   rendererAccessHeader: {
     name: 'x-dsh-desktop-renderer',
     value: Buffer.alloc(32, 8).toString('base64url'),
@@ -153,26 +154,9 @@ describe('compatibility BrowserWindow options', () => {
     }))
   })
 
-  it('uses the Windows 11 system Acrylic backdrop without transparent-window layering', () => {
+  it('keeps a Windows window opaque when material is off', () => {
     const options = advancedWindowOptions(
-      { ...spec, mode: 'advanced', material: 'acrylic', windowsBuild: 22_621 },
-      {} as NativeImage,
-      'win32',
-      preload,
-    )
-
-    expect(options).toEqual(expect.objectContaining({
-      backgroundColor: '#00000000',
-      backgroundMaterial: 'acrylic',
-      roundedCorners: true,
-      thickFrame: true,
-    }))
-    expect(options).not.toHaveProperty('transparent')
-  })
-
-  it('keeps a Windows 11 21H2 window opaque when an unevaluated Acrylic spec reaches construction', () => {
-    const options = advancedWindowOptions(
-      { ...spec, mode: 'advanced', material: 'acrylic', windowsBuild: 22_000 },
+      { ...spec, mode: 'advanced', material: 'off', windowsBuild: 22_000 },
       {} as NativeImage,
       'win32',
       preload,
@@ -191,7 +175,7 @@ describe('compatibility BrowserWindow options', () => {
     const extended = {
       ...spec,
       mode: 'extended' as const,
-      material: 'acrylic' as const,
+      material: 'off' as const,
       windowsBuild: 19_045,
     }
     const options = extendedWindowOptions(extended, {} as NativeImage, 'win32', preload)
@@ -199,8 +183,9 @@ describe('compatibility BrowserWindow options', () => {
     expect(options).toEqual(expect.objectContaining({
       titleBarStyle: 'hidden',
       titleBarOverlay: expect.objectContaining({ height: DESKTOP_FRAME_HEIGHT }),
-      transparent: true,
+      backgroundColor: '#202124',
     }))
+    expect(options).not.toHaveProperty('transparent')
     expect(options).not.toHaveProperty('backgroundMaterial')
     expect(DESKTOP_FRAME_HEIGHT).toBe(36)
     expect(desktopWindowOptions(extended, {} as NativeImage, 'win32', preload)).toEqual(options)

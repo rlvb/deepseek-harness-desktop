@@ -165,6 +165,173 @@ describe('empty tool-call handling', () => {
       },
     })
   })
+
+  it('pairs every trailing call with a synthetic result after a whitespace-only tool name', async () => {
+    const executeToolCalls = await loadExecuteToolCalls()
+    const session = new SessionRecorder()
+    const prepare = vi.fn(async (exec: { name: string }) => ({
+      kind: 'final-result',
+      exec,
+      result: {
+        content: [{ type: 'text', text: `completed ${exec.name}` }],
+        isError: false,
+      },
+    }))
+    const dispatch = vi.fn()
+    const finalize = vi.fn()
+    const finish = vi.fn((_exec: unknown, result: unknown) => result)
+
+    const result = await executeToolCalls({
+      agents: {
+        requireInitiator: () => ({ session }),
+      },
+      tools: {
+        executionMode: () => ({ kind: 'parallel' }),
+        [TOOL_RUNTIME_SCHEDULER]: {
+          prepare,
+          dispatch,
+          finalize,
+          finish,
+        },
+      },
+      agentLoop: {
+        config: { maxParallelToolCalls: 1 },
+      },
+    }, 7, 3, [
+      {
+        id: 'completed-call',
+        name: 'known-tool',
+        arguments: '{}',
+      },
+      {
+        id: 'blank-name-call',
+        name: ' \t ',
+        arguments: '{"blank":true}',
+      },
+      {
+        id: 'trailing-call-1',
+        name: 'must-not-run-1',
+        arguments: '{"index":1}',
+      },
+      {
+        id: 'trailing-call-2',
+        name: 'must-not-run-2',
+        arguments: '{"index":2}',
+      },
+    ], new AbortController().signal, () => {})
+
+    expect(result).toEqual({ concluded: true })
+    expect(prepare).toHaveBeenCalledOnce()
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({
+      callId: 'completed-call',
+      name: 'known-tool',
+    }))
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(finalize).not.toHaveBeenCalled()
+    expect(finish).toHaveBeenCalledOnce()
+    expect(session.events).toHaveLength(8)
+    expect(session.events.slice(2)).toMatchObject([
+      {
+        type: 'tool/call',
+        data: {
+          turn: 7,
+          step: 3,
+          callId: 'blank-name-call',
+          name: ' \t ',
+          arguments: '{"blank":true}',
+        },
+      },
+      {
+        type: 'tool/result',
+        data: {
+          turn: 7,
+          step: 3,
+          message: {
+            role: 'user',
+            content: [{
+              type: 'tool-result',
+              toolCallId: 'blank-name-call',
+              isError: true,
+              content: [{
+                type: 'text',
+                text: expect.stringContaining('empty tool name'),
+              }],
+            }],
+          },
+        },
+        options: {
+          surfaceOp: 'append',
+          sourceEventSeqs: [3],
+        },
+      },
+      {
+        type: 'tool/call',
+        data: {
+          turn: 7,
+          step: 3,
+          callId: 'trailing-call-1',
+          name: 'must-not-run-1',
+          arguments: '{"index":1}',
+        },
+      },
+      {
+        type: 'tool/result',
+        data: {
+          turn: 7,
+          step: 3,
+          message: {
+            role: 'user',
+            content: [{
+              type: 'tool-result',
+              toolCallId: 'trailing-call-1',
+              isError: true,
+              content: [{
+                type: 'text',
+                text: 'Error: tool call skipped because an earlier tool call had an empty tool name',
+              }],
+            }],
+          },
+        },
+        options: {
+          surfaceOp: 'append',
+          sourceEventSeqs: [5],
+        },
+      },
+      {
+        type: 'tool/call',
+        data: {
+          turn: 7,
+          step: 3,
+          callId: 'trailing-call-2',
+          name: 'must-not-run-2',
+          arguments: '{"index":2}',
+        },
+      },
+      {
+        type: 'tool/result',
+        data: {
+          turn: 7,
+          step: 3,
+          message: {
+            role: 'user',
+            content: [{
+              type: 'tool-result',
+              toolCallId: 'trailing-call-2',
+              isError: true,
+              content: [{
+                type: 'text',
+                text: 'Error: tool call skipped because an earlier tool call had an empty tool name',
+              }],
+            }],
+          },
+        },
+        options: {
+          surfaceOp: 'append',
+          sourceEventSeqs: [7],
+        },
+      },
+    ])
+  })
   it('prevents missing required arguments from dispatching, allows one repair, then trips the turn circuit breaker', async () => {
     const executeToolCalls = await loadExecuteToolCalls()
     const session = new SessionRecorder()

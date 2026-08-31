@@ -7,7 +7,7 @@ import type { ProfileCreateWindowOptions } from './profile-create-window.ts'
 import type {
   DesktopWindowMaterial,
   MacosWindowMaterial,
-  WindowsWindowMaterial,
+  PersistedWindowsWindowMaterial,
 } from './window-material.ts'
 
 /** Electron platforms supported by the DSH Desktop native adapter. */
@@ -29,7 +29,7 @@ export interface DesktopWindowConfig {
   /** macOS material preference retained independently across platforms. */
   macosMaterial: MacosWindowMaterial
   /** Windows material preference retained independently across platforms. */
-  windowsMaterial: WindowsWindowMaterial
+  windowsMaterial: PersistedWindowsWindowMaterial
   /** Initial window width in CSS pixels. */
   width: number
   /** Initial window height in CSS pixels. */
@@ -139,6 +139,8 @@ export interface DesktopShellSpec extends DesktopWindowConfig {
   windowsBuild?: number
   /** Unmodified Web root served by the active DSH profile. */
   url: string
+  /** Official one-time launch URL used to mint this Electron session's browser cookie. */
+  authenticationUrl: string
   /** Ephemeral capability attached by Electron to this renderer generation's requests. */
   rendererAccessHeader: DesktopRendererAccessHeader
   /** Native application and tray label. */
