@@ -548,6 +548,18 @@ const loopbackAddresses = new BlockList()
 loopbackAddresses.addSubnet('127.0.0.0', 8, 'ipv4')
 loopbackAddresses.addSubnet('::1', 128, 'ipv6')
 
+function normalizeMappedIpv4(address: string): string {
+  const prefix = '::ffff:'
+  if (!address.toLowerCase().startsWith(prefix)) return address
+  const suffix = address.slice(prefix.length)
+  if (isIP(suffix) === 4) return suffix
+  const segments = suffix.split(':')
+  if (segments.length !== 2 || segments.some(segment => !/^[0-9a-f]{1,4}$/iu.test(segment))) return address
+  const high = Number.parseInt(segments[0]!, 16)
+  const low = Number.parseInt(segments[1]!, 16)
+  return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`
+}
+
 export interface MarketRequestContext {
   readonly remoteAddress: string | undefined
   readonly origin: string | undefined
@@ -559,8 +571,14 @@ export interface MarketRequestContext {
 function marketAuthority(context: MarketRequestContext): URL | undefined {
   if (context.remoteAddress === undefined || context.host === undefined) return undefined
   const address = context.remoteAddress.replace(/^\[|\]$/gu, '').split('%', 1)[0]!
-  const family = isIP(address)
-  if (family === 0 || !loopbackAddresses.check(address, family === 4 ? 'ipv4' : 'ipv6')) return undefined
+  // Node can expose an IPv4 client as an IPv4-mapped IPv6 address when the
+  // loopback server is dual-stack (for example, ::ffff:127.0.0.1). Normalize
+  // that representation before applying the loopback allow-list; otherwise
+  // every Chromium request can be rejected by the local-origin guard on
+  // Windows even though it really came from this machine.
+  const normalizedAddress = normalizeMappedIpv4(address)
+  const family = isIP(normalizedAddress)
+  if (family === 0 || !loopbackAddresses.check(normalizedAddress, family === 4 ? 'ipv4' : 'ipv6')) return undefined
   let authority: URL
   try {
     authority = new URL(`http://${context.host}`)

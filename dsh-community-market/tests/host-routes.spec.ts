@@ -23,7 +23,9 @@ import type { CatalogSourceManifest, LocalSourceRecord } from '../src/contracts/
 import {
   dsh1024StoreInternalHttpClient,
   dsh1024StoreInternalArtifactHttpClient,
+  marketMutationAllowed,
   marketRoutes,
+  marketRequestAllowed,
   registerMarketRoutes,
   type MarketInstallServiceProvider,
 } from '../src/host/routes.js'
@@ -104,6 +106,31 @@ const standardSource = (overrides: Partial<LocalSourceRecord> = {}): LocalSource
   enabled: false,
   order: 1,
   ...overrides,
+})
+
+describe('local market request authority', () => {
+  it('accepts Windows IPv4-mapped loopback addresses', () => {
+    const context = {
+      remoteAddress: '::ffff:127.0.0.1',
+      origin: 'http://127.0.0.1:43120',
+      host: '127.0.0.1:43120',
+      secFetchSite: 'same-origin',
+      expectedPort: 43120,
+    }
+
+    expect(marketRequestAllowed(context)).toBe(true)
+    expect(marketMutationAllowed(context)).toBe(true)
+  })
+
+  it('continues to reject non-loopback IPv4-mapped addresses', () => {
+    expect(marketRequestAllowed({
+      remoteAddress: '::ffff:192.168.1.10',
+      origin: 'http://127.0.0.1:43120',
+      host: '127.0.0.1:43120',
+      secFetchSite: 'same-origin',
+      expectedPort: 43120,
+    })).toBe(false)
+  })
 })
 
 async function startMarketServer(
