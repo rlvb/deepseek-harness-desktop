@@ -28,14 +28,13 @@ import {
 import {
   DSH_1024STORE_ADAPTER_ID,
   DSH_1024STORE_HOSTNAME,
+  DSH_1024STORE_KEY,
   DSH_1024STORE_LEGACY_ADAPTER_ID,
+  DSH_1024STORE_ORIGIN,
   isDsh1024StoreAdapterId,
 } from '../adapters/dsh-1024store.js'
 import {
   DSH_MARKETPLACE_ADAPTER_ID,
-  DSH_MARKETPLACE_HOSTNAME,
-  DSH_MARKETPLACE_KEY,
-  DSH_MARKETPLACE_ORIGIN,
   isDshMarketplaceSourceUrl,
 } from '../adapters/dsh-marketplace.js'
 import { DSHFIND_ADAPTER_ID, DSHFIND_HOSTNAME } from '../adapters/dshfind.js'
@@ -95,6 +94,7 @@ const CATALOG_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const dsh1024StoreHttpClient = createCachedCatalogHttpClient(
   createRestrictedHttpClient({
     syntheticProxyHostnames: [DSH_1024STORE_HOSTNAME],
+    allowedHttpsOrigins: [DSH_1024STORE_ORIGIN],
     maxBodyBytes: MAX_DSH_1024STORE_BODY_BYTES,
   }),
 )
@@ -105,13 +105,6 @@ const dshfindHttpClient = createCachedCatalogHttpClient(
     // source hostnames must never inherit this local-proxy exception.
     syntheticProxyHostnames: [DSHFIND_HOSTNAME],
     maxBodyBytes: MAX_DSHFIND_BODY_BYTES,
-  }),
-)
-
-const dshMarketplaceHttpClient = createCachedCatalogHttpClient(
-  createRestrictedHttpClient({
-    syntheticProxyHostnames: [DSH_MARKETPLACE_HOSTNAME],
-    allowedHttpsOrigins: [DSH_MARKETPLACE_ORIGIN],
   }),
 )
 
@@ -579,7 +572,7 @@ async function mutateSources(
   const builtInKey = mutation.action === 'add-builtin'
     ? mutation.key
     : mutation.action === 'add-standard' && isDshMarketplaceSourceUrl(mutation.manifestUrl)
-      ? DSH_MARKETPLACE_KEY
+      ? DSH_1024STORE_KEY
       : undefined
   if (builtInKey !== undefined) {
     const provider = BUILT_IN_PROVIDERS.find(candidate => candidate.key === builtInKey)
@@ -678,7 +671,6 @@ export function registerMarketRoutes(
       // These are compiled-in adapter hosts, not names supplied by a remote source.
       syntheticProxyHostnames: [
         DSH_1024STORE_HOSTNAME,
-        DSH_MARKETPLACE_HOSTNAME,
         'github.com',
         'avatars.githubusercontent.com',
       ],
@@ -688,7 +680,7 @@ export function registerMarketRoutes(
     adapterHttpClients: new Map([
       [DSH_1024STORE_ADAPTER_ID, dsh1024StoreHttpClient],
       [DSH_1024STORE_LEGACY_ADAPTER_ID, dsh1024StoreHttpClient],
-      [DSH_MARKETPLACE_ADAPTER_ID, dshMarketplaceHttpClient],
+      [DSH_MARKETPLACE_ADAPTER_ID, dsh1024StoreHttpClient],
       [DSHFIND_ADAPTER_ID, dshfindHttpClient],
     ]),
     media,

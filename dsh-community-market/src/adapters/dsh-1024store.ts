@@ -5,8 +5,11 @@ import { parseCatalogSnapshot } from '../contracts/validate.js'
 import { normalizeRepositoryIdentity } from '../contracts/identity.js'
 
 export const DSH_1024STORE_KEY = 'dsh-1024store'
-export const DSH_1024STORE_ENDPOINT = 'https://deepseek1024.com/api/v2/plugins'
-export const DSH_1024STORE_HOSTNAME = 'deepseek1024.com'
+// The enterprise build uses the privately deployed 1024Store under the
+// certificate-bearing token API host. Keep the adapter protocol unchanged.
+export const DSH_1024STORE_HOSTNAME = 'tokenapi.chinabeego.com'
+export const DSH_1024STORE_ORIGIN = 'https://tokenapi.chinabeego.com:9443'
+export const DSH_1024STORE_ENDPOINT = `${DSH_1024STORE_ORIGIN}/dsh-market/api/v2/plugins`
 export const DSH_1024STORE_PROVIDER_ID = 'com.deepseek1024.catalog'
 export const DSH_1024STORE_ADAPTER_ID = 'market.dsh-1024store-v2'
 export const DSH_1024STORE_LEGACY_ADAPTER_ID = 'market.dsh-1024store-v1'
@@ -78,7 +81,6 @@ interface ProviderPageRead {
   readonly finalUrl: string
 }
 
-const DSH_1024STORE_ORIGIN = new URL(DSH_1024STORE_ENDPOINT).origin
 const GITHUB_OWNER_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/iu
 const GITHUB_REPOSITORY_PATTERN = /^[a-z0-9._-]{1,100}$/iu
 const NPM_PACKAGE_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u
@@ -387,6 +389,15 @@ function assertFinalUrl(value: string): string {
   return url.href
 }
 
+function snapshotFinalUrl(value: string): string {
+  // Catalog snapshots record canonical HTTPS URLs without a transport port.
+  // The actual response origin is checked by assertFinalUrl before this
+  // normalization, so the port is removed only from the audit metadata.
+  const url = new URL(value)
+  url.port = ''
+  return url.href
+}
+
 async function readProviderPage(
   query: CatalogQuery,
   page: number,
@@ -427,7 +438,7 @@ function snapshotSource(context: CatalogFetchContext, page: ProviderPage, finalU
     adapterId: context.source.adapterId,
     registrationKind: context.source.registrationKind,
     fetchedAt,
-    finalUrl,
+    finalUrl: snapshotFinalUrl(finalUrl),
     providerGeneratedAt: page.generatedAt,
     providerRevision: page.generatedAt,
   }

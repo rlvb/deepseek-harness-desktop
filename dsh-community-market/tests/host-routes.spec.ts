@@ -10,12 +10,7 @@ import {
   DSH_1024STORE_KEY,
   DSH_1024STORE_PROVIDER_ID,
 } from '../src/adapters/dsh-1024store.js'
-import {
-  DSH_MARKETPLACE_ADAPTER_ID,
-  DSH_MARKETPLACE_KEY,
-  DSH_MARKETPLACE_PROVIDER_ID,
-  DSH_MARKETPLACE_PUBLIC_ENDPOINT,
-} from '../src/adapters/dsh-marketplace.js'
+import { DSH_MARKETPLACE_PUBLIC_ENDPOINT } from '../src/adapters/dsh-marketplace.js'
 import {
   DSHFIND_ADAPTER_ID,
   DSHFIND_ENDPOINT,
@@ -173,21 +168,15 @@ describe('community market Host routes', () => {
       await expect(response.json()).resolves.toMatchObject({
         sources: [{
           sourceRecordId: builtInSource().sourceRecordId,
-          name: 'DSH 1024Store',
+          name: '8号仓技能市集',
           endpoint: DSH_1024STORE_ENDPOINT,
-          partnership: true,
+          partnership: false,
           enabled: false,
         }],
         builtIns: [
           {
             key: DSH_1024STORE_KEY,
             providerId: DSH_1024STORE_PROVIDER_ID,
-            partnership: true,
-          },
-          {
-            key: DSH_MARKETPLACE_KEY,
-            providerId: DSH_MARKETPLACE_PROVIDER_ID,
-            endpoint: DSH_MARKETPLACE_PUBLIC_ENDPOINT,
             partnership: false,
           },
           {
@@ -334,8 +323,7 @@ describe('community market Host routes', () => {
   })
 
   it.each([
-    [DSH_1024STORE_KEY, DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_PROVIDER_ID, 'DSH 1024Store'],
-    [DSH_MARKETPLACE_KEY, DSH_MARKETPLACE_ADAPTER_ID, DSH_MARKETPLACE_PROVIDER_ID, '8号仓技能市集'],
+    [DSH_1024STORE_KEY, DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_PROVIDER_ID, '8号仓技能市集'],
     [DSHFIND_KEY, DSHFIND_ADAPTER_ID, DSHFIND_PROVIDER_ID, 'dshfind'],
   ] as const)('adds reviewed built-in provider %s as a disabled source', async (key, adapterId, providerId, name) => {
     const server = await startMarketServer([])
@@ -490,7 +478,7 @@ describe('community market Host routes', () => {
     }
   })
 
-  it('maps the reviewed DSH Marketplace endpoint URL to its built-in adapter', async () => {
+  it('maps the reviewed private 1024Store endpoint URL to its built-in adapter', async () => {
     const getJson = vi.spyOn(restrictedHttpClient, 'getJson')
     const server = await startMarketServer([])
     try {
@@ -503,9 +491,9 @@ describe('community market Host routes', () => {
       await expect(response.json()).resolves.toMatchObject({
         sources: [{
           registrationKind: 'built-in',
-          adapterId: DSH_MARKETPLACE_ADAPTER_ID,
-          providerId: DSH_MARKETPLACE_PROVIDER_ID,
-          builtInProviderKey: DSH_MARKETPLACE_KEY,
+          adapterId: DSH_1024STORE_ADAPTER_ID,
+          providerId: DSH_1024STORE_PROVIDER_ID,
+          builtInProviderKey: DSH_1024STORE_KEY,
           enabled: false,
         }],
       })

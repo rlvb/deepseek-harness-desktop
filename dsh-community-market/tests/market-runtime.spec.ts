@@ -5,11 +5,12 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   dsh1024StoreAdapter,
   DSH_1024STORE_ADAPTER_ID,
+  DSH_1024STORE_ENDPOINT,
   DSH_1024STORE_KEY,
   DSH_1024STORE_LEGACY_ADAPTER_ID,
+  DSH_1024STORE_ORIGIN,
   DSH_1024STORE_PROVIDER_ID,
 } from '../src/adapters/dsh-1024store.js'
-import { DSH_MARKETPLACE_ADAPTER_ID, DSH_MARKETPLACE_KEY, DSH_MARKETPLACE_PROVIDER_ID } from '../src/adapters/dsh-marketplace.js'
 import { DSHFIND_ADAPTER_ID, DSHFIND_KEY, DSHFIND_PROVIDER_ID } from '../src/adapters/dshfind.js'
 import { standardHttpAdapter } from '../src/adapters/standard-http.js'
 import { DefaultCatalogService, type CatalogFullIndex } from '../src/catalog/service.js'
@@ -105,9 +106,9 @@ function catalogIndex(record: LocalSourceRecord = source()): CatalogFullIndex {
   return {
     source: {
       ...record,
-      name: 'DSH 1024Store',
-      endpoint: 'https://deepseek1024.com/api/v2/plugins',
-      partnership: true,
+      name: '8号仓技能市集',
+      endpoint: DSH_1024STORE_ENDPOINT,
+      partnership: false,
     },
     snapshots: [],
     scannedAt: '2026-08-18T00:00:00.000Z',
@@ -188,7 +189,7 @@ describe('1024Store adapter', () => {
       http: {
         getJson: vi.fn(async () => ({
           value: catalogPage([], 50),
-          finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=100',
+          finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=100`,
         })),
       },
       media: { register: vi.fn() },
@@ -232,9 +233,9 @@ describe('1024Store adapter', () => {
       allowedHostnames: ['github.com', 'avatars.githubusercontent.com'],
     })
     expect(http.getJson).toHaveBeenCalledWith(
-      'https://deepseek1024.com/api/v2/plugins?page=1&limit=50',
+      `${DSH_1024STORE_ENDPOINT}?page=1&limit=50`,
       expect.any(AbortSignal),
-      { allowedOrigin: 'https://deepseek1024.com' },
+      { allowedOrigin: DSH_1024STORE_ORIGIN },
     )
   })
 
@@ -407,7 +408,7 @@ describe('1024Store adapter', () => {
           catalogTotal: 7_635,
           categories: [{ id: 'dev', count: 7_635 }],
         }),
-        finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=50',
+        finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=50`,
       })),
     }
 
@@ -425,7 +426,7 @@ describe('1024Store adapter', () => {
           catalogTotal: 2,
           categories: [{ id: 'dev', count: 2 }],
         }),
-        finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=100',
+        finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=100`,
       })),
     }
 
@@ -845,7 +846,7 @@ describe('catalog Host route pagination boundary', () => {
           adapterId: active.adapterId,
           registrationKind: active.registrationKind,
           fetchedAt: '2026-08-26T00:00:00.000Z',
-          finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=50&q=appshot',
+          finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=50&q=appshot`,
         },
         items: [],
         page: { total: 0 },
@@ -926,7 +927,7 @@ describe('installable Host route pagination boundary', () => {
         adapterId: active.adapterId,
         registrationKind: active.registrationKind,
         fetchedAt: '2026-08-26T00:00:00.000Z',
-        finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=50',
+        finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=50`,
       },
       items: [],
       page: { total: 10_681, nextCursor: 'host-page-2' },
@@ -988,7 +989,7 @@ describe('catalog active-source reads', () => {
     await store.save([legacy])
     const getJson = vi.fn(async () => ({
       value: rawCatalog,
-      finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200',
+      finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200`,
     }))
     const service = new DefaultCatalogService(store, { getJson })
 
@@ -1015,7 +1016,7 @@ describe('catalog active-source reads', () => {
     }
     const getJson = vi.fn(async () => ({
       value: catalogPage([rawPlugin, secondItem]),
-      finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200',
+      finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200`,
     }))
     const service = new DefaultCatalogService(store, { getJson })
 
@@ -1053,7 +1054,7 @@ describe('catalog active-source reads', () => {
     }
     const getJson = vi.fn(async () => ({
       value: catalogPage([rawPlugin, secondItem]),
-      finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200',
+      finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200`,
     }))
     const service = new DefaultCatalogService(store, { getJson })
     const [firstPage] = await service.fetch(
@@ -1088,7 +1089,7 @@ describe('catalog active-source reads', () => {
     }
     const getJson = vi.fn(async () => ({
       value: catalogPage([rawPlugin, secondItem]),
-      finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200',
+      finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200`,
     }))
     const service = new DefaultCatalogService(store, { getJson })
     const [firstPage] = await service.fetch(
@@ -1119,7 +1120,7 @@ describe('catalog active-source reads', () => {
     }
     const getJson = vi.fn(async () => ({
       value: catalogPage([rawPlugin, secondItem]),
-      finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200',
+      finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200`,
     }))
     let now = 1_000
     const service = new DefaultCatalogService(store, { getJson }, {
@@ -1175,7 +1176,7 @@ describe('catalog active-source reads', () => {
       peak = Math.max(peak, active)
       await new Promise<void>(resolve => { releases.push(resolve) })
       active -= 1
-      return { value: rawCatalog, finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200' }
+      return { value: rawCatalog, finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200` }
     })
     const service = new DefaultCatalogService(store, { getJson }, { maxConcurrentSources: 2 })
 
@@ -1218,7 +1219,7 @@ describe('catalog active-source reads', () => {
       source({ sourceRecordId: '028f1f77-a5c4-7b73-a9ae-0242ac120003', order: 1 }),
     ])
     const getJson = vi.fn()
-      .mockResolvedValueOnce({ value: rawCatalog, finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200' })
+      .mockResolvedValueOnce({ value: rawCatalog, finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200` })
     const service = new DefaultCatalogService(store, { getJson })
     const results = await service.fetch({}, new AbortController().signal)
 
@@ -1254,7 +1255,7 @@ describe('catalog active-source reads', () => {
       expect(scanCatalog).not.toHaveBeenCalled()
       expect(getJson).toHaveBeenCalledOnce()
       const requestedUrl = new URL(getJson.mock.calls[0]![0])
-      expect(requestedUrl.pathname).toBe('/api/v2/plugins')
+      expect(requestedUrl.pathname).toBe('/dsh-market/api/v2/plugins')
       expect(requestedUrl.searchParams.get('q')).toBe('appshot')
       expect(results[0]?.snapshot?.items.map(item => item.id)).toEqual(['TaurusWood/dsh-plugin-appshot'])
     } finally {
@@ -1266,7 +1267,7 @@ describe('catalog active-source reads', () => {
     const store = new MemoryCatalogSourceStore()
     await store.save([source()])
     const getJson = vi.fn()
-      .mockResolvedValueOnce({ value: rawCatalog, finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200' })
+      .mockResolvedValueOnce({ value: rawCatalog, finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200` })
     const service = new DefaultCatalogService(store, { getJson })
 
     const first = await service.scanCatalog(new AbortController().signal)
@@ -1289,7 +1290,7 @@ describe('catalog active-source reads', () => {
     const firstPending = service.scanCatalog(new AbortController().signal, { locale: 'zh-CN' })
     const secondPending = service.scanCatalog(new AbortController().signal, { locale: 'zh-CN' })
     await vi.waitFor(() => expect(getJson).toHaveBeenCalledOnce())
-    release?.({ value: rawCatalog, finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200' })
+    release?.({ value: rawCatalog, finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200` })
     const [first, second] = await Promise.all([firstPending, secondPending])
 
     expect(getJson).toHaveBeenCalledOnce()
@@ -1309,7 +1310,7 @@ describe('catalog active-source reads', () => {
     const getJson = vi.fn()
       .mockResolvedValueOnce({
         value: catalogPage([rawPlugin, secondItem]),
-        finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200',
+        finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200`,
       })
       .mockRejectedValueOnce(new Error('offline'))
     let now = 1_000
@@ -1339,7 +1340,7 @@ describe('catalog active-source reads', () => {
     const store = new MemoryCatalogSourceStore()
     await store.save([source()])
     const getJson = vi.fn()
-      .mockResolvedValueOnce({ value: rawCatalog, finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200' })
+      .mockResolvedValueOnce({ value: rawCatalog, finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200` })
       .mockRejectedValueOnce(new Error('offline'))
     const unregisterSource = vi.fn()
     const service = new DefaultCatalogService(store, { getJson }, {
@@ -1393,7 +1394,7 @@ describe('catalog active-source reads', () => {
     const second = source({ sourceRecordId: '028f1f77-a5c4-7b73-a9ae-0242ac120003', order: 1 })
     const getJson = vi.fn(async () => ({
       value: rawCatalog,
-      finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200',
+      finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200`,
     }))
     const service = new DefaultCatalogService({ load: async () => [second, first] }, { getJson })
 
@@ -1416,8 +1417,8 @@ describe('catalog active-source reads', () => {
     }
     const completeCatalog = catalogPage([rawPlugin, secondItem])
     const getJson = vi.fn()
-      .mockResolvedValueOnce({ value: completeCatalog, finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200' })
-      .mockResolvedValueOnce({ value: completeCatalog, finalUrl: 'https://deepseek1024.com/api/v2/plugins?page=1&limit=200' })
+      .mockResolvedValueOnce({ value: completeCatalog, finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200` })
+      .mockResolvedValueOnce({ value: completeCatalog, finalUrl: `${DSH_1024STORE_ENDPOINT}?page=1&limit=200` })
     const service = new DefaultCatalogService(store, { getJson })
 
     const firstIndex = (await service.scanCatalog(new AbortController().signal))!
@@ -1523,7 +1524,6 @@ describe('source mutation boundary', () => {
     const mutate = createMarketSourceMutator(scope)
 
     await mutate({ action: 'add-builtin', key: DSH_1024STORE_KEY }, new AbortController().signal)
-    await mutate({ action: 'add-builtin', key: DSH_MARKETPLACE_KEY }, new AbortController().signal)
     await mutate({ action: 'add-builtin', key: DSHFIND_KEY }, new AbortController().signal)
 
     expect(document.sources).toEqual([
@@ -1535,18 +1535,11 @@ describe('source mutation boundary', () => {
         order: 0,
       }),
       expect.objectContaining({
-        adapterId: DSH_MARKETPLACE_ADAPTER_ID,
-        providerId: DSH_MARKETPLACE_PROVIDER_ID,
-        builtInProviderKey: DSH_MARKETPLACE_KEY,
-        enabled: false,
-        order: 1,
-      }),
-      expect.objectContaining({
         adapterId: DSHFIND_ADAPTER_ID,
         providerId: DSHFIND_PROVIDER_ID,
         builtInProviderKey: DSHFIND_KEY,
         enabled: false,
-        order: 2,
+        order: 1,
       }),
     ])
 
@@ -1554,7 +1547,7 @@ describe('source mutation boundary', () => {
       { action: 'add-builtin', key: 'unknown-provider' },
       new AbortController().signal,
     )).rejects.toThrow(/built-in source unavailable/u)
-    expect(document.sources).toHaveLength(3)
+    expect(document.sources).toHaveLength(2)
   })
 
   it('serializes source writes so concurrent changes cannot overwrite each other', async () => {

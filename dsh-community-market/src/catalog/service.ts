@@ -16,9 +16,6 @@ import {
 import {
   DSH_MARKETPLACE_ADAPTER_ID,
   DSH_MARKETPLACE_KEY,
-  DSH_MARKETPLACE_PROVIDER_ID,
-  DSH_MARKETPLACE_PUBLIC_ENDPOINT,
-  dshMarketplaceAdapter,
 } from '../adapters/dsh-marketplace.js'
 import { DSHFIND_ADAPTER_ID, DSHFIND_ENDPOINT, DSHFIND_KEY, DSHFIND_PROVIDER_ID, dshfindAdapter } from '../adapters/dshfind.js'
 import { standardHttpAdapter } from '../adapters/standard-http.js'
@@ -41,29 +38,15 @@ export interface BuiltInProviderDefinition {
 export const BUILT_IN_PROVIDERS: readonly BuiltInProviderDefinition[] = [
   {
     key: DSH_1024STORE_KEY,
-    name: 'DSH 1024Store',
-    description: '合作提供方目录。需要用户明确添加并启用。目录收录不代表插件经过审核或推荐。',
+    name: '8号仓技能市集',
+    description: '8号仓私有部署的 DSH 1024Store，提供插件目录与排行榜。目录收录不代表插件经过审核或推荐。',
     providerId: DSH_1024STORE_PROVIDER_ID,
     adapterId: DSH_1024STORE_ADAPTER_ID,
     endpoint: DSH_1024STORE_ENDPOINT,
     attribution: {
-      name: 'DSH 1024Store',
-      url: 'https://deepseek1024.com',
-      notice: 'Community catalog data provided by a cooperating provider.',
-    },
-    partnership: true,
-  },
-  {
-    key: DSH_MARKETPLACE_KEY,
-    name: '8号仓技能市集',
-    description: '8号仓企业插件目录，通过内置兼容适配器只读接入。目录收录不代表插件经过审核或推荐。',
-    providerId: DSH_MARKETPLACE_PROVIDER_ID,
-    adapterId: DSH_MARKETPLACE_ADAPTER_ID,
-    endpoint: DSH_MARKETPLACE_PUBLIC_ENDPOINT,
-    attribution: {
       name: '8号仓技能市集',
-      url: 'https://tokenapi.chinabeego.com:9443/guide/dsh-marketplace/',
-      notice: 'Enterprise catalog connected through a reviewed compatibility adapter.',
+      url: 'https://tokenapi.chinabeego.com:9443/dsh-market',
+      notice: 'Private enterprise DSH 1024Store catalog and rankings.',
     },
     partnership: false,
   },
@@ -83,11 +66,32 @@ export const BUILT_IN_PROVIDERS: readonly BuiltInProviderDefinition[] = [
   },
 ]
 
+// 2.0.19 persisted this temporary compatibility key while the private
+// 1024Store endpoint was being verified. It is intentionally hidden from the
+// add-source list, but sourceView still resolves it so existing installations
+// display the current market name and endpoint after upgrade.
+const LEGACY_BUILT_IN_PROVIDER: BuiltInProviderDefinition = {
+  key: DSH_MARKETPLACE_KEY,
+  name: '8号仓技能市集',
+  description: '8号仓私有部署的 DSH 1024Store，提供插件目录与排行榜。目录收录不代表插件经过审核或推荐。',
+  providerId: DSH_1024STORE_PROVIDER_ID,
+  adapterId: DSH_1024STORE_ADAPTER_ID,
+  endpoint: DSH_1024STORE_ENDPOINT,
+  attribution: {
+    name: '8号仓技能市集',
+    url: 'https://tokenapi.chinabeego.com:9443/dsh-market',
+    notice: 'Private enterprise DSH 1024Store catalog and rankings.',
+  },
+  partnership: false,
+}
+
 const adapters = new Map<string, CatalogAdapter>([
   [standardHttpAdapter.adapterId, standardHttpAdapter],
   [dsh1024StoreAdapter.adapterId, dsh1024StoreAdapter],
   [DSH_1024STORE_LEGACY_ADAPTER_ID, dsh1024StoreAdapter],
-  [dshMarketplaceAdapter.adapterId, dshMarketplaceAdapter],
+  // Route the temporary 2.0.19 source identity to the real private 1024Store
+  // protocol instead of the removed static compatibility directory.
+  [DSH_MARKETPLACE_ADAPTER_ID, dsh1024StoreAdapter],
   [dshfindAdapter.adapterId, dshfindAdapter],
 ])
 
@@ -99,6 +103,7 @@ function sourceView(record: LocalSourceRecord): MarketSourceView {
   const builtIn = record.builtInProviderKey === undefined
     ? undefined
     : BUILT_IN_PROVIDERS.find(provider => provider.key === record.builtInProviderKey)
+      ?? (record.builtInProviderKey === LEGACY_BUILT_IN_PROVIDER.key ? LEGACY_BUILT_IN_PROVIDER : undefined)
   const description = builtIn?.description ?? record.manifest?.description
   const attribution = builtIn?.attribution ?? record.manifest?.attribution
   return {
@@ -119,7 +124,8 @@ function catalogScanKey(sourceRecordId: string, locale: string | undefined): str
 }
 
 function prefersProviderSearch(source: LocalSourceRecord, query: CatalogQuery): boolean {
-  return source.adapterId === DSH_1024STORE_ADAPTER_ID && query.q !== undefined
+  return (isDsh1024StoreAdapterId(source.adapterId) || source.adapterId === DSH_MARKETPLACE_ADAPTER_ID)
+    && query.q !== undefined
 }
 
 function cachedScanView(entry: CatalogFullIndexCacheEntry, cacheStatus: 'fresh' | 'cached'): CatalogFullIndex {

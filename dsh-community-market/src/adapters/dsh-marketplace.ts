@@ -3,6 +3,7 @@ import type { CatalogSnapshot } from '../contracts/generated/catalog-snapshot.js
 import { normalizeRepositoryIdentity } from '../contracts/identity.js'
 import type { CatalogAdapter, CatalogFetchContext } from '../contracts/types.js'
 import { parseCatalogSnapshot } from '../contracts/validate.js'
+import { DSH_1024STORE_ENDPOINT, DSH_1024STORE_HOSTNAME, DSH_1024STORE_ORIGIN } from './dsh-1024store.js'
 
 export const DSH_MARKETPLACE_KEY = 'dsh-marketplace-qilewl'
 export const DSH_MARKETPLACE_PROVIDER_ID = 'dsh-marketplace-community'
@@ -10,11 +11,13 @@ export const DSH_MARKETPLACE_ADAPTER_ID = 'market.dsh-marketplace-qilewl-v1'
 // Keep the key and adapter id stable so existing installations migrate without
 // losing their selected source. The public transport is now hosted by the
 // enterprise HTTPS service instead of the unavailable qilewl endpoint.
-export const DSH_MARKETPLACE_HOSTNAME = 'tokenapi.chinabeego.com'
-export const DSH_MARKETPLACE_ORIGIN = 'https://tokenapi.chinabeego.com:9443'
-export const DSH_MARKETPLACE_PUBLIC_ENDPOINT = `${DSH_MARKETPLACE_ORIGIN}/guide/dsh-marketplace/v1/plugins.json`
-export const DSH_MARKETPLACE_MANIFEST_URL = `${DSH_MARKETPLACE_ORIGIN}/guide/dsh-marketplace/catalog-source.json`
-export const DSH_MARKETPLACE_API_ENDPOINT = `${DSH_MARKETPLACE_ORIGIN}/guide/dsh-marketplace/api/plugins.json`
+export const DSH_MARKETPLACE_HOSTNAME = DSH_1024STORE_HOSTNAME
+export const DSH_MARKETPLACE_ORIGIN = DSH_1024STORE_ORIGIN
+// Legacy aliases from 2.0.19. New installations use the real 1024Store
+// provider; old records are routed through the 1024Store adapter by service.
+export const DSH_MARKETPLACE_PUBLIC_ENDPOINT = DSH_1024STORE_ENDPOINT
+export const DSH_MARKETPLACE_MANIFEST_URL = `${DSH_MARKETPLACE_ORIGIN}/dsh-market`
+export const DSH_MARKETPLACE_API_ENDPOINT = DSH_1024STORE_ENDPOINT
 
 const PAGE_SIZE = 100
 const MAX_ITEMS = 10_000
