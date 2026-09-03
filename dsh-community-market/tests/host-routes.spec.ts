@@ -335,7 +335,7 @@ describe('community market Host routes', () => {
 
   it.each([
     [DSH_1024STORE_KEY, DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_PROVIDER_ID, 'DSH 1024Store'],
-    [DSH_MARKETPLACE_KEY, DSH_MARKETPLACE_ADAPTER_ID, DSH_MARKETPLACE_PROVIDER_ID, 'DSH Marketplace'],
+    [DSH_MARKETPLACE_KEY, DSH_MARKETPLACE_ADAPTER_ID, DSH_MARKETPLACE_PROVIDER_ID, '8号仓技能市集'],
     [DSHFIND_KEY, DSHFIND_ADAPTER_ID, DSHFIND_PROVIDER_ID, 'dshfind'],
   ] as const)('adds reviewed built-in provider %s as a disabled source', async (key, adapterId, providerId, name) => {
     const server = await startMarketServer([])

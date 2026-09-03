@@ -35,6 +35,7 @@ import {
   DSH_MARKETPLACE_ADAPTER_ID,
   DSH_MARKETPLACE_HOSTNAME,
   DSH_MARKETPLACE_KEY,
+  DSH_MARKETPLACE_ORIGIN,
   isDshMarketplaceSourceUrl,
 } from '../adapters/dsh-marketplace.js'
 import { DSHFIND_ADAPTER_ID, DSHFIND_HOSTNAME } from '../adapters/dshfind.js'
@@ -110,6 +111,7 @@ const dshfindHttpClient = createCachedCatalogHttpClient(
 const dshMarketplaceHttpClient = createCachedCatalogHttpClient(
   createRestrictedHttpClient({
     syntheticProxyHostnames: [DSH_MARKETPLACE_HOSTNAME],
+    allowedHttpsOrigins: [DSH_MARKETPLACE_ORIGIN],
   }),
 )
 

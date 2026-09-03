@@ -61,6 +61,11 @@ export interface RestrictedHttpClientOptions {
    * RFC 2544 fake-IP range. User-provided catalog hosts must never be added.
    */
   readonly syntheticProxyHostnames?: readonly string[]
+  /**
+   * Exact compiled-in HTTPS origins that may use a non-default port. This is
+   * intentionally separate from user-provided source validation.
+   */
+  readonly allowedHttpsOrigins?: readonly string[]
   readonly lookupAddresses?: (hostname: string) => Promise<readonly PinnedAddress[]>
   readonly resolveAddress?: (hostname: string) => Promise<PinnedAddress>
   readonly request?: (
@@ -92,14 +97,20 @@ export function pinnedLookupResult(options: { readonly all?: boolean | undefined
   return options.all ? [pinned] : pinned
 }
 
-function validateUrl(value: string): URL {
+function validateUrl(value: string, allowedHttpsOrigins: ReadonlySet<string>): URL {
   let url: URL
   try {
     url = new URL(value)
   } catch {
     throw new CatalogNetworkError('invalid-url')
   }
-  if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.port && url.port !== '443') {
+  if (
+    url.protocol !== 'https:'
+    || url.username
+    || url.password
+    || url.hash
+    || url.port && url.port !== '443' && !allowedHttpsOrigins.has(url.origin)
+  ) {
     throw new CatalogNetworkError('invalid-url')
   }
   return url
@@ -208,11 +219,12 @@ async function fetchJson(
   signal: AbortSignal,
   resolveAddress: (hostname: string) => Promise<PinnedAddress>,
   request: (url: URL, signal: AbortSignal, pinned: PinnedAddress) => Promise<RestrictedHttpResponse>,
+  allowedHttpsOrigins: ReadonlySet<string>,
   allowedOrigin: string | undefined,
   redirectCount = 0,
 ): Promise<CatalogHttpResponse> {
   if (signal.aborted) throw new CatalogNetworkError('timeout')
-  const url = validateUrl(start)
+  const url = validateUrl(start, allowedHttpsOrigins)
   if (allowedOrigin !== undefined && url.origin !== allowedOrigin) throw new CatalogNetworkError('redirect')
   if (redirectCount > MAX_REDIRECTS) throw new CatalogNetworkError('redirect')
   const pinned = await resolveAddress(url.hostname)
@@ -227,6 +239,7 @@ async function fetchJson(
       signal,
       resolveAddress,
       request,
+      allowedHttpsOrigins,
       allowedOrigin,
       redirectCount + 1,
     )
@@ -253,6 +266,7 @@ export function createRestrictedHttpClient(
   const syntheticProxyHostnames = new Set(
     (options.syntheticProxyHostnames ?? []).map(hostname => hostname.toLowerCase()),
   )
+  const allowedHttpsOrigins = new Set(options.allowedHttpsOrigins ?? [])
   const lookupAddresses = options.lookupAddresses ?? defaultLookupAddresses
   const resolveAddress = options.resolveAddress
     ?? (async hostname => await resolvePinnedAddress(hostname, lookupAddresses, syntheticProxyHostnames))
@@ -281,7 +295,14 @@ export function createRestrictedHttpClient(
           reject(cause)
         }, totalTimeoutMs)
       })
-      const operation = fetchJson(start, totalController.signal, resolveAddress, request, policy.allowedOrigin)
+      const operation = fetchJson(
+        start,
+        totalController.signal,
+        resolveAddress,
+        request,
+        allowedHttpsOrigins,
+        policy.allowedOrigin,
+      )
       try {
         return await Promise.race([operation, aborted, timedOut])
       } finally {

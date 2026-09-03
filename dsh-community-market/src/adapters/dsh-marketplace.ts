@@ -7,12 +7,15 @@ import { parseCatalogSnapshot } from '../contracts/validate.js'
 export const DSH_MARKETPLACE_KEY = 'dsh-marketplace-qilewl'
 export const DSH_MARKETPLACE_PROVIDER_ID = 'dsh-marketplace-community'
 export const DSH_MARKETPLACE_ADAPTER_ID = 'market.dsh-marketplace-qilewl-v1'
-export const DSH_MARKETPLACE_HOSTNAME = 'dsh-marketplace.qilewl.net'
-export const DSH_MARKETPLACE_PUBLIC_ENDPOINT = 'https://dsh-marketplace.qilewl.net/v1/plugins'
-export const DSH_MARKETPLACE_MANIFEST_URL = 'https://dsh-marketplace.qilewl.net/catalog-source.json'
-export const DSH_MARKETPLACE_API_ENDPOINT = 'https://dsh-marketplace.qilewl.net/api/plugins'
+// Keep the key and adapter id stable so existing installations migrate without
+// losing their selected source. The public transport is now hosted by the
+// enterprise HTTPS service instead of the unavailable qilewl endpoint.
+export const DSH_MARKETPLACE_HOSTNAME = 'tokenapi.chinabeego.com'
+export const DSH_MARKETPLACE_ORIGIN = 'https://tokenapi.chinabeego.com:9443'
+export const DSH_MARKETPLACE_PUBLIC_ENDPOINT = `${DSH_MARKETPLACE_ORIGIN}/guide/dsh-marketplace/v1/plugins.json`
+export const DSH_MARKETPLACE_MANIFEST_URL = `${DSH_MARKETPLACE_ORIGIN}/guide/dsh-marketplace/catalog-source.json`
+export const DSH_MARKETPLACE_API_ENDPOINT = `${DSH_MARKETPLACE_ORIGIN}/guide/dsh-marketplace/api/plugins.json`
 
-const DSH_MARKETPLACE_ORIGIN = `https://${DSH_MARKETPLACE_HOSTNAME}`
 const PAGE_SIZE = 100
 const MAX_ITEMS = 10_000
 const MAX_PAGES = 100
@@ -31,6 +34,7 @@ interface ProviderPage {
   readonly size: number
   readonly current: number
   readonly pages: number
+  readonly staticSnapshot: boolean
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -65,6 +69,15 @@ function assertFinalOrigin(value: string): string {
   return url.href
 }
 
+function snapshotFinalUrl(value: string): string {
+  // The normalized catalog-snapshot contract records canonical HTTPS URLs on
+  // the default port. The request origin was already checked above, so this
+  // only removes the enterprise service's transport port from the audit URL.
+  const url = new URL(value)
+  url.port = ''
+  return url.href
+}
+
 function providerPage(value: unknown, expectedPage: number, expectedSize: number): ProviderPage {
   const root = record(value)
   const data = record(root?.data)
@@ -77,15 +90,20 @@ function providerPage(value: unknown, expectedPage: number, expectedSize: number
   const size = safeInteger(plugins.size, 'page size', 1)
   const current = safeInteger(plugins.current, 'page number', 1)
   const pages = safeInteger(plugins.pages, 'page count')
+  const staticSnapshot = root?.provider === '8hcdsh'
   if (total !== nestedTotal || total > MAX_ITEMS) throw new Error('DSH Marketplace total is inconsistent')
-  if (size !== expectedSize || current !== expectedPage) throw new Error('DSH Marketplace page did not match the request')
+  // The enterprise catalog is served as a static snapshot and may use a
+  // smaller fixed page size than the requested UI page. Keep the original
+  // request/response size check for any non-enterprise response.
+  if (!staticSnapshot && size !== expectedSize) throw new Error('DSH Marketplace page size did not match the request')
+  if (current !== expectedPage) throw new Error('DSH Marketplace page did not match the request')
   if (pages !== (total === 0 ? 0 : Math.ceil(total / size))) {
     throw new Error('DSH Marketplace page metadata is inconsistent')
   }
   if (plugins.records.length > size || (pages > 0 && current > pages)) {
     throw new Error('DSH Marketplace item count is inconsistent')
   }
-  return { records: plugins.records, total, size, current, pages }
+  return { records: plugins.records, total, size, current, pages, staticSnapshot }
 }
 
 function repositoryIdentity(raw: Record<string, unknown>): {
@@ -233,7 +251,7 @@ function snapshot(
       adapterId: context.source.adapterId,
       registrationKind: context.source.registrationKind,
       fetchedAt,
-      finalUrl,
+      finalUrl: snapshotFinalUrl(finalUrl),
     },
     items,
     page,
@@ -257,7 +275,7 @@ function scanSnapshots(
 export function isDshMarketplaceSourceUrl(value: string): boolean {
   try {
     const url = new URL(value)
-    if (url.protocol !== 'https:' || url.username || url.password || url.port || url.search || url.hash) return false
+    if (url.protocol !== 'https:' || url.username || url.password || url.port !== '9443' || url.search || url.hash) return false
     return url.href === DSH_MARKETPLACE_PUBLIC_ENDPOINT || url.href === DSH_MARKETPLACE_MANIFEST_URL
   } catch {
     return false
@@ -298,7 +316,7 @@ export const dshMarketplaceAdapter: CatalogAdapter = {
       const response = await context.http.getJson(request.url, context.signal, { allowedOrigin: DSH_MARKETPLACE_ORIGIN })
       const finalUrl = assertFinalOrigin(response.finalUrl)
       firstFinalUrl ??= finalUrl
-      const page = providerPage(response.value, current, PAGE_SIZE)
+      const page = providerPage(response.value, current, request.size)
       total ??= page.total
       pages ??= page.pages
       if (page.pages > MAX_PAGES) throw new Error('DSH Marketplace exceeded the scan page limit')
