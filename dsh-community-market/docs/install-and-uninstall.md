@@ -49,6 +49,16 @@ Failure keeps the item browseable and may expose a display-only manual command.
 
 This flow applies equally to plugins installed by Community Market, another plugin market, or the DSH CLI. Market offers no enable or disable action.
 
+## Internal one-click installation
+
+The enterprise **Internal** directory never opens a private Gitea repository and never lets the Renderer execute server-provided command text. **Install with one click** requests and consumes a single-use install ticket with the current OpenAI-group Key, then accepts only this reviewed target shape:
+
+```text
+dsh plugin --profile <profile> add <npm-package>
+```
+
+The package must resolve from DSH’s npm registry and pass the DSH bundle check. It then follows the same confirmation, exact-version installation, Profile update, and restart flow as a public plugin. Gitea/GitHub URLs and custom commands are rejected with an administrator configuration message instead of being executed.
+
 ## Manual fallback
 
 If automatic preview is unavailable, the Host may construct a bounded display-only npm command from normalized identity. **Open DSH Terminal** opens the terminal only; it sends no package command, path, or Profile and performs no mutation.

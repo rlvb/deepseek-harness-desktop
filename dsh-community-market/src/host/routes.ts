@@ -16,6 +16,8 @@ import type {
   MarketInstallationView,
   MarketInternalIdentity,
   MarketInternalInstallTicketResponse,
+  MarketInternalInstallPreviewRequest,
+  MarketInternalProjectRequest,
   MarketInternalPlugin,
   MarketInternalPluginsResponse,
   MarketManualInstallHint,
@@ -48,7 +50,7 @@ import { SettingsCatalogSourceStore, type MarketCatalogCache, type MarketSetting
 import { MARKET_MEDIA_ASSET_REF_PATTERN } from '../media/ref.js'
 import { createRestrictedImageFetcher } from '../media/restricted-image.js'
 import { createMarketMediaService } from '../media/service.js'
-import { MarketInstallError, type MarketInstallService } from '../install/service.js'
+import { MarketInstallError, reviewedNpmPackageName, type MarketInstallService } from '../install/service.js'
 import { manualInstallHints } from '../install/manual.js'
 
 export const MARKET_SETTINGS_NAMESPACE = settingsNamespace('dsh-community-market')
@@ -91,6 +93,8 @@ const ROUTE_OPERATION_EXECUTE = '/api/community-market/operations/execute'
 const ROUTE_INTERNAL_AUTH = '/api/community-market/internal/auth'
 const ROUTE_INTERNAL_PLUGINS = '/api/community-market/internal/plugins'
 const ROUTE_INTERNAL_INSTALL_TICKET = '/api/community-market/internal/install-ticket'
+const ROUTE_INTERNAL_INSTALL_PREVIEW = '/api/community-market/internal/install-preview'
+const ROUTE_INTERNAL_PROJECT = '/api/community-market/internal/project'
 const MAX_BODY_BYTES = 16 * 1024
 // v2 is paginated, so the reviewed provider no longer needs the old full-body
 // exception. Keep a per-page ceiling independent of the complete catalog size.
@@ -148,8 +152,8 @@ function sendJson(res: ServerResponse, status: number, value: unknown): void {
 
 class InternalMarketError extends Error {
   constructor(
-    readonly status: 400 | 401 | 403 | 502 | 503,
-    readonly code: 'internal-invalid-request' | 'internal-key-required' | 'internal-key-invalid' | 'internal-permission-denied' | 'internal-service-unavailable' | 'internal-invalid-response',
+    readonly status: 400 | 401 | 403 | 422 | 502 | 503,
+    readonly code: 'internal-invalid-request' | 'internal-key-required' | 'internal-key-invalid' | 'internal-permission-denied' | 'internal-service-unavailable' | 'internal-invalid-response' | 'internal-install-unsupported',
     message: string,
   ) {
     super(message)
@@ -230,6 +234,7 @@ function internalPlugin(value: unknown): MarketInternalPlugin | undefined {
     description: { en, zh },
     added,
     ...(typeof source.install === 'string' && source.install.length <= 500 ? { install: source.install } : {}),
+    ...(typeof source.readme === 'string' && source.readme.length <= 256 * 1024 ? { readme: source.readme } : {}),
     updatedAt,
     ownerUsername,
     reviewStatus: 'approved',
@@ -626,6 +631,35 @@ function asOperationPreview(value: unknown): MarketOperationPreviewRequest {
     && boundedIdentifier(request.bundleId)
   ) return { action: 'uninstall', bundleId: request.bundleId }
   throw new MarketInstallError('invalid-request', 'Invalid package operation preview request.')
+}
+
+function asInternalInstallPreview(value: unknown): MarketInternalInstallPreviewRequest {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new InternalMarketError(400, 'internal-invalid-request', '内部插件安装请求无效。')
+  }
+  const request = value as Record<string, unknown>
+  if (!exactKeys(request, ['displayName', 'pluginId', 'ticket'])
+    || !boundedIdentifier(request.pluginId)
+    || !boundedIdentifier(request.ticket)
+    || boundedText(request.displayName, 200) === undefined) {
+    throw new InternalMarketError(400, 'internal-invalid-request', '内部插件安装请求无效。')
+  }
+  return {
+    pluginId: request.pluginId,
+    ticket: request.ticket,
+    displayName: request.displayName as string,
+  }
+}
+
+function asInternalProjectRequest(value: unknown): MarketInternalProjectRequest {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new InternalMarketError(400, 'internal-invalid-request', '内部插件项目请求无效。')
+  }
+  const request = value as Record<string, unknown>
+  if (!exactKeys(request, ['pluginId']) || !boundedIdentifier(request.pluginId)) {
+    throw new InternalMarketError(400, 'internal-invalid-request', '内部插件项目标识无效。')
+  }
+  return { pluginId: request.pluginId }
 }
 
 function asOperationExecute(value: unknown): string {
@@ -1045,6 +1079,88 @@ export function registerMarketRoutes(
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, result)
       } catch (cause) {
         if (!signal.aborted && !res.destroyed) sendInternalFailure(res, cause)
+      } finally {
+        stopWatching()
+      }
+    }}),
+    ctx.webServer.register({ kind: 'exact', path: ROUTE_INTERNAL_INSTALL_PREVIEW, handler: async (req, res) => {
+      if (req.method !== 'POST' || !mutationAllowed(req, expectedPort)) {
+        sendJson(res, 405, { error: 'internal install previews require a local same-origin POST' })
+        return
+      }
+      const controller = new AbortController()
+      const signal = AbortSignal.any([controller.signal, generationController.signal])
+      const stopWatching = abortOnDisconnect(req, res, controller)
+      try {
+        const request = asInternalInstallPreview(await readJson(req, signal))
+        const key = internalKey(internalCredentialsProvider)
+        const response = await dsh1024StoreInternalHttpClient.getJson(
+          `${INTERNAL_API_PREFIX}/v1/internal/install/${encodeURIComponent(request.ticket)}`,
+          signal,
+          internalPolicy(key),
+        )
+        const payload = recordValue(response.value)
+        const returnedPluginId = boundedText(payload?.pluginId, 256)
+        const install = boundedText(payload?.install, 500)
+        if (payload?.ok !== true || returnedPluginId !== request.pluginId || install === undefined) {
+          throw new InternalMarketError(502, 'internal-invalid-response', '私有 1024Store 返回了无法识别的安装授权。')
+        }
+        const packageName = reviewedNpmPackageName(install)
+        if (packageName === undefined) {
+          throw new InternalMarketError(
+            422,
+            'internal-install-unsupported',
+            '该内部插件尚未配置标准 npm 安装目标，请联系管理员发布可一键安装版本。',
+          )
+        }
+        const installService = installProvider?.get()
+        if (installService === undefined) {
+          throw new InternalMarketError(503, 'internal-service-unavailable', '当前环境暂不支持内部插件一键安装。')
+        }
+        const preview = await installService.previewPackage(packageName, request.displayName, signal)
+        const { intent, ...summary } = preview
+        if (!signal.aborted && !res.destroyed) sendJson(res, 200, { ...summary, previewId: intent })
+      } catch (cause) {
+        if (signal.aborted || res.destroyed) return
+        if (cause instanceof MarketInstallError) {
+          const status = cause.code === 'not-available' ? 404
+            : cause.code === 'conflict' ? 409
+              : cause.code === 'verification-failed' ? 422
+                : cause.code === 'invalid-request' ? 400
+                  : 502
+          sendJson(res, status, { error: cause.message, code: cause.code })
+        } else {
+          sendInternalFailure(res, cause)
+        }
+      } finally {
+        stopWatching()
+      }
+    }}),
+    ctx.webServer.register({ kind: 'exact', path: ROUTE_INTERNAL_PROJECT, handler: async (req, res) => {
+      if (req.method !== 'POST' || !requestAllowed(req, expectedPort)) {
+        sendJson(res, 405, { error: 'internal project details require a local same-origin POST' })
+        return
+      }
+      const controller = new AbortController()
+      const signal = AbortSignal.any([controller.signal, generationController.signal])
+      const stopWatching = abortOnDisconnect(req, res, controller)
+      try {
+        const request = asInternalProjectRequest(await readJson(req, signal))
+        const key = internalKey(internalCredentialsProvider)
+        const encoded = request.pluginId.split('/').map(encodeURIComponent).join('/')
+        const response = await dsh1024StoreInternalHttpClient.getJson(
+          `${INTERNAL_API_PREFIX}/v2/internal/plugins/${encoded}`,
+          signal,
+          internalPolicy(key),
+        )
+        const plugin = internalPlugin(response.value)
+        if (plugin === undefined) {
+          throw new InternalMarketError(502, 'internal-invalid-response', '私有 1024Store 返回了无法识别的项目介绍。')
+        }
+        if (!signal.aborted && !res.destroyed) sendJson(res, 200, plugin)
+      } catch (cause) {
+        if (signal.aborted || res.destroyed) return
+        sendInternalFailure(res, cause)
       } finally {
         stopWatching()
       }
@@ -1506,4 +1622,6 @@ export const marketRoutes = {
   internalAuth: ROUTE_INTERNAL_AUTH,
   internalPlugins: ROUTE_INTERNAL_PLUGINS,
   internalInstallTicket: ROUTE_INTERNAL_INSTALL_TICKET,
+  internalInstallPreview: ROUTE_INTERNAL_INSTALL_PREVIEW,
+  internalProject: ROUTE_INTERNAL_PROJECT,
 }

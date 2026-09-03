@@ -19,10 +19,12 @@ import {
   issueMarketInternalInstallTicket,
   mutateMarketSource,
   openMarketTerminal,
+  previewMarketInternalInstall,
   previewMarketOperation,
   readMarketCatalog,
   readMarketInstallable,
   readMarketInternalPlugins,
+  readMarketInternalProject,
   readMarketInstallations,
   readMarketState,
   readMoreMarketCatalog,
@@ -35,10 +37,12 @@ vi.mock('../src/client/api.js', () => ({
   issueMarketInternalInstallTicket: vi.fn(),
   mutateMarketSource: vi.fn(),
   openMarketTerminal: vi.fn(),
+  previewMarketInternalInstall: vi.fn(),
   previewMarketOperation: vi.fn(),
   readMarketCatalog: vi.fn(),
   readMarketInstallable: vi.fn(),
   readMarketInternalPlugins: vi.fn(),
+  readMarketInternalProject: vi.fn(),
   readMarketInstallations: vi.fn(),
   readMoreMarketCatalog: vi.fn(),
   readMarketState: vi.fn(),
@@ -247,7 +251,7 @@ function catalogForSource(
 const catalog = catalogForSource(firstSource)
 
 describe('MarketSettingsTab', () => {
-  it('keeps the private 1024Store directory in a dedicated view and issues a server ticket', async () => {
+  it('keeps private plugins in a dedicated view with project details and one-click install', async () => {
     const internal: MarketInternalPluginsResponse = {
       plugins: [{
         id: 'enterprise/internal-plugin',
@@ -282,12 +286,25 @@ describe('MarketSettingsTab', () => {
     }
     vi.mocked(readMarketState).mockResolvedValue(emptyState)
     vi.mocked(readMarketInternalPlugins).mockResolvedValue(internal)
+    vi.mocked(readMarketInternalProject).mockResolvedValue({
+      ...internal.plugins[0]!,
+      readme: '# Enterprise Internal Plugin\n\nInternal README',
+    })
     vi.mocked(issueMarketInternalInstallTicket).mockResolvedValue({
       ok: true,
       pluginId: internal.plugins[0]!.id,
       install: 'dsh plugin --profile web add https://tokenapi.chinabeego.com/gitea/enterprise/internal-plugin',
       ticket: 'ticket-1',
       expiresAt: '2026-09-03T00:05:00Z',
+    })
+    vi.mocked(previewMarketInternalInstall).mockResolvedValue({
+      action: 'install',
+      profileName: 'web',
+      packageName: 'dsh-plugin-internal',
+      version: '1.2.3',
+      displayName: 'Enterprise Internal Plugin',
+      expiresAt: '2026-09-03T00:05:00Z',
+      previewId: 'preview-1',
     })
 
     render(<MarketSettingsTab {...props} />)
@@ -298,9 +315,21 @@ describe('MarketSettingsTab', () => {
     expect(screen.getByText(/8号仓token工厂-openAI/u)).toBeTruthy()
     expect(readMarketInternalPlugins).toHaveBeenCalledWith('', expect.any(AbortSignal), false)
 
-    fireEvent.click(screen.getByRole('button', { name: en.internalIssueTicket }))
-    expect(await screen.findByText(en.internalTicketIssued)).toBeTruthy()
-    expect(issueMarketInternalInstallTicket).toHaveBeenCalledWith(internal.plugins[0]!.id)
+    fireEvent.click(screen.getByRole('button', { name: en.projectIntro }))
+    expect(await screen.findByRole('heading', { name: internal.plugins[0]!.name })).toBeTruthy()
+    expect(await screen.findByText(/Internal README/u)).toBeTruthy()
+    expect(readMarketInternalProject).toHaveBeenCalledWith(internal.plugins[0]!.id, expect.any(AbortSignal))
+    fireEvent.click(screen.getByRole('button', { name: en.close }))
+
+    fireEvent.click(screen.getByRole('button', { name: en.internalOneClickInstall }))
+    expect(await screen.findByRole('heading', { name: en.confirmInstallTitle })).toBeTruthy()
+    expect(issueMarketInternalInstallTicket).toHaveBeenCalledWith(internal.plugins[0]!.id, expect.any(AbortSignal))
+    expect(previewMarketInternalInstall).toHaveBeenCalledWith({
+      pluginId: internal.plugins[0]!.id,
+      ticket: 'ticket-1',
+      displayName: internal.plugins[0]!.name,
+    }, expect.any(AbortSignal))
+
   })
 
   it('opens on Installable by default', async () => {

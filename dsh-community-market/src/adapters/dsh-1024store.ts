@@ -3,20 +3,27 @@ import type { CatalogQuery } from '../contracts/generated/catalog-query.js'
 import type { CatalogSnapshot } from '../contracts/generated/catalog-snapshot.js'
 import { parseCatalogSnapshot } from '../contracts/validate.js'
 import { normalizeRepositoryIdentity } from '../contracts/identity.js'
+import {
+  DSH_1024STORE_ADAPTER_ID,
+  DSH_1024STORE_ENDPOINT,
+  DSH_1024STORE_HOSTNAME,
+  DSH_1024STORE_ORIGIN,
+} from './dsh-1024store-link.js'
+
+export {
+  DSH_1024STORE_ADAPTER_ID,
+  DSH_1024STORE_ENDPOINT,
+  DSH_1024STORE_HOSTNAME,
+  DSH_1024STORE_LEGACY_ADAPTER_ID,
+  DSH_1024STORE_ORIGIN,
+  dsh1024StoreProjectUrl,
+  isDsh1024StoreAdapterId,
+} from './dsh-1024store-link.js'
 
 export const DSH_1024STORE_KEY = 'dsh-1024store'
 // The enterprise build uses the privately deployed 1024Store under the
 // certificate-bearing token API host. Keep the adapter protocol unchanged.
-export const DSH_1024STORE_HOSTNAME = 'tokenapi.chinabeego.com'
-export const DSH_1024STORE_ORIGIN = 'https://tokenapi.chinabeego.com:9443'
-export const DSH_1024STORE_ENDPOINT = `${DSH_1024STORE_ORIGIN}/dsh-market/api/v2/plugins`
 export const DSH_1024STORE_PROVIDER_ID = 'com.deepseek1024.catalog'
-export const DSH_1024STORE_ADAPTER_ID = 'market.dsh-1024store-v2'
-export const DSH_1024STORE_LEGACY_ADAPTER_ID = 'market.dsh-1024store-v1'
-
-export function isDsh1024StoreAdapterId(value: string | undefined): boolean {
-  return value === DSH_1024STORE_ADAPTER_ID || value === DSH_1024STORE_LEGACY_ADAPTER_ID
-}
 
 export interface Dsh1024StoreRawItem {
   readonly id?: unknown

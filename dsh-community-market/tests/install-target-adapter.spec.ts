@@ -4,6 +4,7 @@ import {
   DSH_1024STORE_ENDPOINT,
   DSH_1024STORE_KEY,
   DSH_1024STORE_PROVIDER_ID,
+  dsh1024StoreProjectUrl,
   dsh1024StoreAdapter,
 } from '../src/adapters/dsh-1024store.js'
 import type { CatalogHttpClient, CatalogSnapshot, LocalSourceRecord } from '../src/contracts/index.js'
@@ -82,6 +83,16 @@ async function adapt(install: string, itemOverrides: Record<string, unknown> = {
 }
 
 describe('1024Store v2 install target normalization', () => {
+  it('builds the canonical market project page instead of a source repository URL', () => {
+    expect(dsh1024StoreProjectUrl('omdsh-dev/DSH-better-sidebar')).toBe(
+      'https://tokenapi.chinabeego.com:9443/dsh-market/plugins/omdsh-dev/DSH-better-sidebar',
+    )
+    expect(dsh1024StoreProjectUrl('omdsh-dev/DSH-better-sidebar/packages/sidebar')).toBe(
+      'https://tokenapi.chinabeego.com:9443/dsh-market/plugins/omdsh-dev/DSH-better-sidebar/packages/sidebar',
+    )
+    expect(dsh1024StoreProjectUrl('invalid')).toBeUndefined()
+  })
+
   it.each([
     ['plain package', 'dsh plugin --profile web add dsh-better-sidebar', 'dsh-better-sidebar'],
     ['scoped package', 'dsh plugin --profile desktop add @scope/dsh-plugin', '@scope/dsh-plugin'],

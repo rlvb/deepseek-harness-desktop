@@ -27,7 +27,6 @@ import type {
   MarketCatalogResponse,
   MarketCatalogSourceResult,
   MarketInstallationView,
-  MarketInternalInstallTicketResponse,
   MarketInternalPlugin,
   MarketInternalPluginsResponse,
   MarketInstallableResponse,
@@ -38,15 +37,18 @@ import type {
   MarketStateResponse,
 } from '../api-types.js'
 import { marketMediaAssetUrl } from '../media/ref.js'
+import { dsh1024StoreProjectUrl, isDsh1024StoreAdapterId } from '../adapters/dsh-1024store-link.js'
 import {
   executeMarketOperation,
   issueMarketInternalInstallTicket,
   mutateMarketSource,
   openMarketTerminal,
+  previewMarketInternalInstall,
   previewMarketOperation,
   readMarketCatalog,
   readMarketInstallable,
   readMarketInternalPlugins,
+  readMarketInternalProject,
   readMarketInstallations,
   readMarketState,
   readMoreMarketCatalog,
@@ -92,6 +94,11 @@ type InstallationLoadOutcome =
 
 function visibleItemKey(value: VisibleItem): string {
   return `${value.source.sourceRecordId}\0${value.source.providerId}\0${value.item.id}\0${value.item.package?.name ?? ''}`
+}
+
+function marketProjectUrl(value: VisibleItem): string | undefined {
+  if (!isDsh1024StoreAdapterId(value.source.adapterId)) return undefined
+  return dsh1024StoreProjectUrl(value.item.id)
 }
 
 function matchingInstallation(
@@ -148,6 +155,9 @@ function internalFailureMessage(cause: unknown, t: MarketSettingsTabProps['t']):
   if (code === 'internal-key-invalid') return t('internalKeyInvalid')
   if (code === 'internal-permission-denied') return t('internalPermissionDenied')
   if (code === 'internal-invalid-response') return t('internalInvalidResponse')
+  if (code === 'internal-install-unsupported' || code === 'verification-failed') {
+    return t('internalInstallUnavailable')
+  }
   return t('internalUnavailable')
 }
 
@@ -270,6 +280,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
   const [error, setError] = useState<string>()
   const [loadMoreError, setLoadMoreError] = useState<string>()
   const [selected, setSelected] = useState<VisibleItem>()
+  const [selectedInternal, setSelectedInternal] = useState<MarketInternalPlugin>()
   const [addOpen, setAddOpen] = useState(false)
   const [manifestUrl, setManifestUrl] = useState('')
   const [mutationError, setMutationError] = useState<string>()
@@ -290,8 +301,9 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
   const [internalLoaded, setInternalLoaded] = useState(false)
   const [internalLoading, setInternalLoading] = useState(false)
   const [internalError, setInternalError] = useState<string>()
-  const [internalTicket, setInternalTicket] = useState<MarketInternalInstallTicketResponse>()
   const [internalTicketPending, setInternalTicketPending] = useState(false)
+  const [selectedInternalLoading, setSelectedInternalLoading] = useState(false)
+  const [selectedInternalError, setSelectedInternalError] = useState<string>()
   const [installationsLoaded, setInstallationsLoaded] = useState(false)
   const [installationsLoading, setInstallationsLoading] = useState(false)
   const [installationsUnavailable, setInstallationsUnavailable] = useState(false)
@@ -312,6 +324,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
   const mutationRequest = useRef<AbortController>()
   const installableRequest = useRef<AbortController>()
   const internalRequest = useRef<AbortController>()
+  const selectedInternalRequest = useRef<AbortController>()
   const installationsRequest = useRef<AbortController>()
   const operationRequest = useRef<AbortController>()
   const operationStage = useRef<'preview' | 'execute'>()
@@ -544,18 +557,73 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
     }
   }, [t])
 
-  const issueInternalTicket = async (plugin: MarketInternalPlugin) => {
-    if (internalTicketPending) return
-    setInternalTicketPending(true)
-    setInternalTicket(undefined)
-    setInternalError(undefined)
+  const openInternalProject = async (plugin: MarketInternalPlugin) => {
+    selectedInternalRequest.current?.abort()
+    const request = new AbortController()
+    selectedInternalRequest.current = request
+    setSelectedInternal(plugin)
+    setSelectedInternalLoading(true)
+    setSelectedInternalError(undefined)
     try {
-      const response = await issueMarketInternalInstallTicket(plugin.id)
-      setInternalTicket(response)
+      const detail = await readMarketInternalProject(plugin.id, request.signal)
+      if (request.signal.aborted || selectedInternalRequest.current !== request) return
+      setSelectedInternal(detail)
     } catch (cause) {
-      setInternalError(internalFailureMessage(cause, t))
+      if (request.signal.aborted || selectedInternalRequest.current !== request) return
+      setSelectedInternalError(internalFailureMessage(cause, t))
     } finally {
-      setInternalTicketPending(false)
+      if (selectedInternalRequest.current === request) {
+        selectedInternalRequest.current = undefined
+        setSelectedInternalLoading(false)
+      }
+    }
+  }
+
+  const beginInternalInstall = async (plugin: MarketInternalPlugin) => {
+    if (internalTicketPending || operationRequest.current !== undefined) return
+    const request = new AbortController()
+    operationRequest.current = request
+    operationStage.current = 'preview'
+    setInternalTicketPending(true)
+    setOperationPending(true)
+    setOperationPreview(undefined)
+    setOperationError(undefined)
+    setOperationErrorDetailsValue(undefined)
+    setOperationExecutionFailed(false)
+    setOperationSuccess(undefined)
+    setDesktopActionError(undefined)
+    setInternalError(undefined)
+    selectedInternalRequest.current?.abort()
+    setSelectedInternal(undefined)
+    try {
+      const ticket = await issueMarketInternalInstallTicket(plugin.id, request.signal)
+      if (request.signal.aborted || operationRequest.current !== request) return
+      const preview = await previewMarketInternalInstall({
+        pluginId: plugin.id,
+        ticket: ticket.ticket,
+        displayName: plugin.name,
+      }, request.signal)
+      if (request.signal.aborted || operationRequest.current !== request) return
+      if (preview.action !== 'install') throw new Error('internal install preview action mismatch')
+      setInstallationsUnavailable(false)
+      setOperationPreview(preview)
+    } catch (cause) {
+      if (request.signal.aborted || operationRequest.current !== request) return
+      if (isDesktopUnavailable(cause)) {
+        setInstallationsUnavailable(true)
+        setInstallationsError(t('desktopUnavailable'))
+        setOperationError(t('desktopUnavailable'))
+      } else {
+        setInternalError(internalFailureMessage(cause, t))
+        setOperationError(operationErrorMessage(cause, t('internalInstallUnavailable')))
+      }
+    } finally {
+      if (operationRequest.current === request) {
+        operationRequest.current = undefined
+        operationStage.current = undefined
+        setInternalTicketPending(false)
+        setOperationPending(false)
+      }
     }
   }
 
@@ -575,6 +643,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       mutationRequest.current?.abort()
       installableRequest.current?.abort()
       internalRequest.current?.abort()
+      selectedInternalRequest.current?.abort()
       installationsRequest.current?.abort()
       operationRequest.current?.abort()
       desktopActionRequest.current?.abort()
@@ -583,6 +652,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       mutationRequest.current = undefined
       installableRequest.current = undefined
       internalRequest.current = undefined
+      selectedInternalRequest.current = undefined
       installationsRequest.current = undefined
       operationRequest.current = undefined
       desktopActionRequest.current = undefined
@@ -1093,14 +1163,14 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
             loaded={internalLoaded}
             loading={internalLoading}
             error={internalError}
-            ticket={internalTicket}
             ticketPending={internalTicketPending}
             locale={readLocale()}
             onQuery={setInternalQuery}
             onSearch={() => { void loadInternal(false, internalQuery) }}
             onRefresh={() => { void loadInternal(true, internalAppliedQuery) }}
             onRetry={() => { void loadInternal(false, internalAppliedQuery) }}
-            onIssueTicket={plugin => { void issueInternalTicket(plugin) }}
+            onInstall={plugin => { void beginInternalInstall(plugin) }}
+            onOpenProject={plugin => { void openInternalProject(plugin) }}
             t={t}
           />
         ) : view === 'installed' ? (
@@ -1174,6 +1244,24 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
           t={t}
         />
       )}
+      {selectedInternal !== undefined && operationPreview === undefined && (
+        <InternalProjectModal
+          plugin={selectedInternal}
+          locale={readLocale()}
+          pending={internalTicketPending}
+          loading={selectedInternalLoading}
+          error={selectedInternalError}
+          onClose={() => {
+            if (internalTicketPending) return
+            selectedInternalRequest.current?.abort()
+            selectedInternalRequest.current = undefined
+            setSelectedInternalLoading(false)
+            setSelectedInternal(undefined)
+          }}
+          onInstall={() => { void beginInternalInstall(selectedInternal) }}
+          t={t}
+        />
+      )}
       {operationSuccess !== undefined && (
         <OperationSuccessModal
           operation={operationSuccess}
@@ -1240,13 +1328,13 @@ function InternalPluginsView(props: {
   loaded: boolean
   loading: boolean
   error?: string | undefined
-  ticket?: MarketInternalInstallTicketResponse | undefined
   ticketPending: boolean
   onQuery: (value: string) => void
   onSearch: () => void
   onRefresh: () => void
   onRetry: () => void
-  onIssueTicket: (plugin: MarketInternalPlugin) => void
+  onInstall: (plugin: MarketInternalPlugin) => void
+  onOpenProject: (plugin: MarketInternalPlugin) => void
   t: MarketSettingsTabProps['t']
 }) {
   const chinese = props.locale.toLowerCase().startsWith('zh')
@@ -1291,14 +1379,6 @@ function InternalPluginsView(props: {
         <Pill>{props.index?.total ?? plugins.length}</Pill>
       </form>
       {props.error !== undefined && <div className="dshMarketBanner" role="alert"><StateDot state="error" />{props.error}</div>}
-      {props.ticket !== undefined && (
-        <div className="dshMarketInternalTicket" role="status">
-          <strong>{props.t('internalTicketIssued')}</strong>
-          <span>{props.t('internalTicketExpires')}: {props.ticket.expiresAt}</span>
-          <code>{props.ticket.ticket}</code>
-          <span>{props.ticket.install}</span>
-        </div>
-      )}
       {plugins.length === 0 ? (
         <div className="dshMarketEmpty"><h2>{props.t('internalNoPlugins')}</h2><p>{props.t('internalNoPluginsBody')}</p></div>
       ) : (
@@ -1319,15 +1399,70 @@ function InternalPluginsView(props: {
                   variant="primary"
                   size="sm"
                   disabled={props.ticketPending}
-                  onClick={() => props.onIssueTicket(plugin)}
-                >{props.ticketPending ? '…' : props.t('internalIssueTicket')}</Button>
-                <a href={plugin.repository} target="_blank" rel="noopener noreferrer">{props.t('repository')}</a>
+                  onClick={() => props.onInstall(plugin)}
+                >{props.ticketPending ? '…' : props.t('internalOneClickInstall')}</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={props.ticketPending}
+                  onClick={() => props.onOpenProject(plugin)}
+                >{props.t('projectIntro')}</Button>
               </div>
             </article>
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+function InternalProjectModal({ plugin, locale, pending, loading, error, onClose, onInstall, t }: {
+  plugin: MarketInternalPlugin
+  locale: string
+  pending: boolean
+  loading: boolean
+  error?: string | undefined
+  onClose: () => void
+  onInstall: () => void
+  t: MarketSettingsTabProps['t']
+}) {
+  const chinese = locale.toLowerCase().startsWith('zh')
+  const description = chinese ? plugin.description.zh : plugin.description.en
+  return (
+    <Modal
+      open
+      className="dshMarketModal dshMarketWideModal"
+      contentClassName="dshMarketModalContent"
+      onClose={onClose}
+      title={plugin.name}
+      closeLabel={t('close')}
+      description={t('internalProjectBody')}
+      footer={<div className="dshMarketModalActions">
+        <Button variant="ghost" disabled={pending} onClick={onClose}>{t('close')}</Button>
+        <Button
+          variant="primary"
+          icon={<IconDownloadOutline16 />}
+          disabled={pending}
+          onClick={onInstall}
+        >{pending ? t('installing') : t('internalOneClickInstall')}</Button>
+      </div>}
+    >
+      <div className="dshMarketDetails dshMarketInternalProject">
+        <div className="dshMarketDetailsIntro">
+          <div className="dshMarketInternalGlyph"><IconCordisPluginOutline14 size={28} /></div>
+          {loading ? <p>{t('loading')}</p> : plugin.readme !== undefined ? (
+            <pre className="dshMarketInternalReadme">{plugin.readme}</pre>
+          ) : <p>{description}</p>}
+        </div>
+        <dl className="dshMarketOperationFacts">
+          <div><dt>{t('pluginId')}</dt><dd>{plugin.id}</dd></div>
+          <div><dt>{t('category')}</dt><dd>{plugin.category}</dd></div>
+          <div><dt>{t('owner')}</dt><dd>{plugin.ownerUsername}</dd></div>
+          {plugin.approvedCommit !== null && <div><dt>{t('approvedCommit')}</dt><dd>{plugin.approvedCommit}</dd></div>}
+        </dl>
+        {error !== undefined && <div className="dshMarketError" role="alert">{error}</div>}
+      </div>
+    </Modal>
   )
 }
 
@@ -2134,7 +2269,16 @@ function ItemActionModal({
       onClick={onConfirm}
     >{pending ? t('installing') : t('confirmInstall')}</Button>
   </> : <>
-    {value.item.repository !== undefined && (
+    {marketProjectUrl(value) !== undefined ? (
+      <Button
+        variant="outline"
+        icon={<IconRightUpOutline16 size={12} />}
+        onClick={() => {
+          const href = marketProjectUrl(value)
+          if (href !== undefined) window.open(href, '_blank', 'noopener,noreferrer')
+        }}
+      >{t('projectPage')}</Button>
+    ) : value.item.repository !== undefined && (
       <Button
         variant="outline"
         icon={<IconRightUpOutline16 size={12} />}

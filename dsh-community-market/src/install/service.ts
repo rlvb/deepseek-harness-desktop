@@ -32,6 +32,8 @@ const MAX_CANDIDATES = 10_000
 const MAX_PNPM_STREAM_OUTPUT_BYTES = 32 * 1024
 const MAX_FAILURE_CAUSE_LENGTH = 4 * 1024
 const BLOCKED_PRODUCT_PACKAGES = new Set(['dsh-plugin-desktop', 'dsh-community-market'])
+const PROFILE_PATTERN = /^[A-Za-z0-9_-]+$/u
+const COMMAND_TOKEN_PATTERN = /^[A-Za-z0-9@:/._#+=-]+$/u
 
 export interface MarketDesktopProfile {
   readonly name: string
@@ -251,6 +253,31 @@ function safePackageName(value: unknown): value is string {
 
 function marketManagedPackage(value: string): boolean {
   return !BLOCKED_PRODUCT_PACKAGES.has(value)
+}
+
+/**
+ * Convert only the reviewed DSH npm command shape into a package identity.
+ * The command itself is never executed; callers must still verify the package
+ * with the npm registry before creating an install intent.
+ */
+export function reviewedNpmPackageName(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 1024) return undefined
+  const tokens = value.trim().split(/\s+/u)
+  if (
+    tokens.length !== 6
+    || tokens[0] !== 'dsh'
+    || tokens[1] !== 'plugin'
+    || tokens[2] !== '--profile'
+    || !PROFILE_PATTERN.test(tokens[3]!)
+    || tokens[4] !== 'add'
+    || !tokens.every(token => COMMAND_TOKEN_PATTERN.test(token))
+  ) return undefined
+  const target = tokens[5]!
+  const versionSeparator = target.startsWith('@')
+    ? target.indexOf('@', target.indexOf('/') + 1)
+    : target.indexOf('@')
+  const name = versionSeparator < 0 ? target : target.slice(0, versionSeparator)
+  return safePackageName(name) && marketManagedPackage(name) ? name : undefined
 }
 
 function candidateKey(sourceRecordId: string, itemId: string): string {
@@ -613,6 +640,68 @@ export class MarketInstallService {
       action: 'install',
       profileName: profile.name,
       packageName,
+      version: verification.version,
+      displayName: candidate.displayName,
+      expiresAt: new Date(this.now() + this.intentTtlMs).toISOString(),
+    }
+  }
+
+  /**
+   * Preview a Host-authorized internal plugin whose reviewed install command
+   * resolved to an npm package. The candidate is intentionally kept outside
+   * the public catalog index but uses the same verifier and execution path.
+   */
+  async previewPackage(
+    packageName: string,
+    displayName: string,
+    signal: AbortSignal,
+  ): Promise<MarketInstallPreview> {
+    const operationSignal = this.operationSignal(signal)
+    operationSignal.throwIfAborted()
+    this.purge()
+    if (!safePackageName(packageName) || !marketManagedPackage(packageName)) {
+      throw new MarketInstallError('verification-failed', 'The internal plugin package target is invalid.')
+    }
+    const profile = this.profile()
+    await assertNotInstalled(profile, packageName)
+    const candidate: InstallCandidate = Object.freeze({
+      key: candidateKey('internal', `${packageName}:${opaqueToken()}`),
+      sourceRecordId: 'internal',
+      providerId: 'dsh-1024store-internal',
+      itemId: packageName,
+      displayName: displayName.trim().length > 0 ? displayName.trim() : packageName,
+      packageName,
+      savedAt: this.now(),
+    })
+    this.candidates.set(candidate.key, candidate)
+    this.trim(this.candidates, this.maxCandidates)
+    let verification: MarketPackageVerification
+    try { verification = await this.verifier.verify(candidate, operationSignal) }
+    catch (cause) {
+      this.candidates.delete(candidate.key)
+      operationSignal.throwIfAborted()
+      throw cause
+    }
+    operationSignal.throwIfAborted()
+    this.assertOpen()
+    const token = this.issueIntent({
+      kind: 'install',
+      candidate,
+      verification,
+      profile,
+      expiresAt: this.now() + this.intentTtlMs,
+    })
+    const verifiedPackageName = verification.packageName ?? candidate.packageName
+    if (verifiedPackageName !== packageName || !safePackageName(verifiedPackageName)) {
+      this.intents.delete(token)
+      throw new MarketInstallError('verification-failed', 'The internal plugin package identity did not match.')
+    }
+    await assertNotInstalled(profile, verifiedPackageName)
+    return {
+      intent: token,
+      action: 'install',
+      profileName: profile.name,
+      packageName: verifiedPackageName,
       version: verification.version,
       displayName: candidate.displayName,
       expiresAt: new Date(this.now() + this.intentTtlMs).toISOString(),

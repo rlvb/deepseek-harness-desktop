@@ -12,6 +12,7 @@ import { marketRoutes, registerMarketRoutes } from '../src/host/routes.js'
 import {
   createNpmRegistryVerifier,
   MarketInstallService,
+  reviewedNpmPackageName,
   type MarketDesktopPnpm,
 } from '../src/install/service.js'
 
@@ -106,6 +107,14 @@ function runner(profileDir: string, calls: string[][]): MarketDesktopPnpm {
 }
 
 describe('npm latest resolution', () => {
+  it('accepts only the reviewed DSH npm command shape for internal one-click installation', () => {
+    expect(reviewedNpmPackageName('dsh plugin --profile web add dsh-plugin-safe')).toBe('dsh-plugin-safe')
+    expect(reviewedNpmPackageName('dsh plugin --profile web add @scope/dsh-plugin@latest')).toBe('@scope/dsh-plugin')
+    expect(reviewedNpmPackageName('dsh plugin --profile web add https://tokenapi.example/gitea/team/plugin')).toBeUndefined()
+    expect(reviewedNpmPackageName('dsh plugin --profile web add dsh-plugin-safe;whoami')).toBeUndefined()
+    expect(reviewedNpmPackageName('dsh plugin --profile web add dsh-plugin-desktop')).toBeUndefined()
+  })
+
   it('uses npm latest and accepts lifecycle, deprecated, and unrelated repository metadata', async () => {
     const getJson = vi.fn(async () => ({
       finalUrl: `https://registry.npmjs.org/${packageName}/latest`,
@@ -222,6 +231,32 @@ describe('simplified Profile package operations', () => {
       dependencies: { [packageName]: version },
       dsh: { profile: { bundles: [packageName] } },
     })
+    expect(verify).toHaveBeenCalledOnce()
+  })
+
+  it('uses the same verified install path for an internal npm package', async () => {
+    const profileDir = await createProfile()
+    const calls: string[][] = []
+    const verify = vi.fn(async () => ({ version }))
+    const service = new MarketInstallService(
+      () => ({ name: 'web', dir: profileDir }),
+      runner(profileDir, calls),
+      { verify },
+    )
+
+    const preview = await service.previewPackage(packageName, 'Internal safe plugin', new AbortController().signal)
+    expect(preview).toMatchObject({ action: 'install', packageName, displayName: 'Internal safe plugin' })
+    await expect(service.executePreview(preview.intent, new AbortController().signal)).resolves.toMatchObject({
+      action: 'install',
+      packageName,
+      version,
+    })
+    expect(calls).toEqual([[
+      'add',
+      '--save-exact',
+      '--registry=https://registry.npmjs.org/',
+      `${packageName}@${version}`,
+    ]])
     expect(verify).toHaveBeenCalledOnce()
   })
 

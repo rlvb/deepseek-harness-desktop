@@ -146,6 +146,8 @@ export interface MarketInternalPlugin {
   readonly reviewStatus: 'approved'
   readonly sourceCommit: string | null
   readonly approvedCommit: string | null
+  /** README returned only by the Host-authorized internal project detail call. */
+  readonly readme?: string
 }
 
 export interface MarketInternalPluginsResponse {
@@ -166,6 +168,17 @@ export interface MarketInternalInstallTicketResponse {
   readonly install: string
   readonly ticket: string
   readonly expiresAt: string
+}
+
+/** Renderer request for the Host-owned internal plugin install handoff. */
+export interface MarketInternalInstallPreviewRequest {
+  readonly pluginId: string
+  readonly ticket: string
+  readonly displayName: string
+}
+
+export interface MarketInternalProjectRequest {
+  readonly pluginId: string
 }
 
 /** Renderer input for the non-mutating verification stage. */

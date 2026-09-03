@@ -422,7 +422,7 @@ describe('community market overlay', () => {
     expect(input).toHaveProperty('value', 'https://plugins.example.org/broken.json')
   })
 
-  it('opens plugin details and forwards the repository link safely', async () => {
+  it('opens plugin details and forwards the 1024Store project page safely', async () => {
     const request = vi.fn<typeof fetch>(async (input) => (
       String(input).includes('/state') ? response(stateWithSource) : response(catalogWithItem)
     ))
@@ -433,8 +433,12 @@ describe('community market overlay', () => {
     fireEvent.click(screen.getByText('Better Sidebar').closest('button')!)
 
     const details = screen.getByRole('dialog', { name: 'Better Sidebar' })
-    fireEvent.click(within(details).getByRole('button', { name: 'repository' }))
-    expect(open).toHaveBeenCalledWith('https://github.com/example/better-sidebar', '_blank', 'noopener,noreferrer')
+    fireEvent.click(within(details).getByRole('button', { name: 'projectPage' }))
+    expect(open).toHaveBeenCalledWith(
+      'https://tokenapi.chinabeego.com:9443/dsh-market/plugins/example/better-sidebar',
+      '_blank',
+      'noopener,noreferrer',
+    )
 
     fireEvent.click(within(details).getByRole('button', { name: 'close' }))
     expect(screen.queryByRole('dialog', { name: 'Better Sidebar' })).toBeNull()

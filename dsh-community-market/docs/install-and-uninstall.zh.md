@@ -49,6 +49,16 @@ Market 安装不会创建 receipt、checkpoint、重试、清理或回滚 operat
 
 无论插件由 Community Market、其他插件市场还是 DSH CLI 安装，都使用同一流程。Market 不提供启用或禁用操作。
 
+## 内部插件一键安装
+
+企业版的“内部插件”目录不会打开私有 Gitea 仓库，也不会让 Renderer 执行服务端返回的命令。点击“一键安装”时，Host 会使用当前 OpenAI 分组 Key 申请并消费一次性 install ticket，然后仅接受以下格式的审核安装目标：
+
+```text
+dsh plugin --profile <profile> add <npm-package>
+```
+
+目标包必须能从 DSH 使用的 npm registry 解析，并通过 DSH bundle 校验；之后进入和公共插件相同的确认、精确版本安装、Profile 更新和重启流程。若内部目录记录的是 Gitea/GitHub 地址或自定义命令，DSH 会拒绝自动执行并提示管理员重新发布标准 npm 安装目标。
+
 ## 手动兜底
 
 自动 preview 不可用时，Host 可以根据标准化身份构造一条有界且只用于展示的 npm 命令。**打开 DSH 终端**只打开终端，不会提交 package 命令、路径或 Profile，也不会执行修改。

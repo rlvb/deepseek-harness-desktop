@@ -3,6 +3,9 @@ import type {
   MarketDesktopActionResponse,
   MarketInstallableResponse,
   MarketInternalInstallTicketResponse,
+  MarketInternalInstallPreviewRequest,
+  MarketInternalProjectRequest,
+  MarketInternalPlugin,
   MarketInternalPluginsResponse,
   MarketInstallationsResponse,
   MarketOperationExecuteResponse,
@@ -152,6 +155,31 @@ export async function issueMarketInternalInstallTicket(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ pluginId }),
+    ...(signal === undefined ? {} : { signal }),
+  }))
+}
+
+export async function previewMarketInternalInstall(
+  request: MarketInternalInstallPreviewRequest,
+  signal?: AbortSignal,
+): Promise<MarketOperationPreviewResponse> {
+  return await readJson(await fetch('/api/community-market/internal/install-preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(request),
+    ...(signal === undefined ? {} : { signal }),
+  }))
+}
+
+export async function readMarketInternalProject(
+  pluginId: string,
+  signal?: AbortSignal,
+): Promise<MarketInternalPlugin> {
+  const request: MarketInternalProjectRequest = { pluginId }
+  return await readJson(await fetch('/api/community-market/internal/project', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(request),
     ...(signal === undefined ? {} : { signal }),
   }))
 }

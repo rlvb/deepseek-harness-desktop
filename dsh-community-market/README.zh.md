@@ -38,11 +38,13 @@ Renderer 在安装时不会提交 package name 或 package-manager 命令，只�
 
 ## 私有内部插件目录
 
-企业版在公共目录之外提供独立的 **内部插件** 视图。它连接私有部署的 DSH 1024Store 内部接口，不把内部条目合并到公共目录、公共分页或公共缓存。用户可以从左侧市场入口进入公共市集，也可以从旁边的“内部插件”快捷入口直接进入内部目录。
+企业版在 **8号仓插件市集** 中提供公共目录和独立的 **内部插件** 视图。它连接私有部署的 DSH 1024Store 内部接口，不把内部条目合并到公共目录、公共分页或公共缓存。用户可以从左侧市集入口进入公共目录，也可以从旁边的“内部插件”快捷入口直接进入内部目录。
 
 内部目录的请求只在 Host 完成：Host 从 `dsh-sub2api` 注入的 `dshSub2ApiCredentials` 能力读取 `BHCTOKENAPI_API_KEY`，先调用 `/api/v1/internal/auth/me` 校验，再调用 `/api/v2/internal/plugins` 获取当前账号可见的已审核条目。GPT/GPTVIP Key 不用于内部目录授权。原始 Key 不会进入 Renderer、URL、localStorage、公共缓存或日志。
 
-内部条目仅展示服务端返回的安全字段，并且必须是 `reviewStatus=approved`。用户点击“获取安装凭证”时，Host 调用内部 install-ticket 接口返回短时、一次性的 ticket 和服务端安装说明；当前版本不会直接执行服务端返回的命令。真正的一键安装需要 1024Store 提供受控包代理或企业代码托管下载服务后，再增加独立 Host 安装适配器。
+内部条目仅展示服务端返回的安全字段，并且必须是 `reviewStatus=approved`。用户可以先打开“项目介绍”查看审核描述；内部私有仓库不会直接在 DSH 中打开。用户点击“一键安装”后，Host 申请并消费短时、一次性的 install ticket，只接受严格的 `dsh plugin --profile <profile> add <npm-package>` 安装目标，再复用 DSH 的 npm 验证、安装确认、Profile 更新和重启流程。服务端命令不会被当作 Shell 命令执行。
+
+为了让内部插件出现在“一键安装”流程中，1024Store 审核记录的 `install` 字段必须使用上述标准 npm 命令格式，并且目标包需要发布到 DSH 使用的 npm registry、包含有效的 DSH bundle 声明。旧的 Gitea URL、GitHub URL 或任意自定义命令不会被自动执行，会在 DSH 中提示管理员重新发布标准安装目标。
 
 错误状态含义：`internal-key-required` 是本机未配置 OpenAI 分组 Key，`internal-key-invalid` 是 Key 无效/过期，`internal-permission-denied` 是账号无内部目录权限，`internal-service-unavailable` 是私有 Store 或网络暂时不可用。每次目录读取都会重新校验 `auth/me`，所以账号权限变化无需重启 DSH。
 
@@ -50,7 +52,7 @@ Renderer 在安装时不会提交 package name 或 package-manager 命令，只�
 
 任何人都可以发布符合公开 [`catalog-source`](docs/schemas/catalog-source.schema.json) 与 [`catalog-provider-page`](docs/schemas/catalog-provider-page.schema.json) 合同的来源；现有 API 也可以通过经过审查的本地 adapter 接入。远端数据会在 Client 看到前完成标准化，provider 命令永远不会被展示或执行。
 
-[DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) 是可选合作来源。Desktop 使用当前分页的 `/api/v2/plugins` 目录完成浏览、搜索、排序和分类，不再依赖冻结在 500 条的 v1 兼容 feed。v2 命令绝不会被执行：只有严格匹配纯文本 `dsh plugin --profile … add <npm-package>` 的形状才会贡献 npm package 身份，安装 preview 仍以 npm `latest` 为版本权威。仅有 GitHub 目标的条目保持可浏览，但不会被标成可自动安装。
+[DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) 是可选合作来源。公共目录中的“项目介绍”会打开 1024Store 项目页，由项目页读取并展示 README；不会把用户导向可能需要额外权限的源码地址。Desktop 使用当前分页的 `/api/v2/plugins` 目录完成浏览、搜索、排序和分类，不再依赖冻结在 500 条的 v1 兼容 feed。v2 命令绝不会被执行：只有严格匹配纯文本 `dsh plugin --profile … add <npm-package>` 的形状才会贡献 npm package 身份，安装 preview 仍以 npm `latest` 为版本权威。仅有 GitHub 目标的条目保持可浏览，但不会被标成可自动安装。
 
 [dshfind](https://dshfind.com) 是另一个可选合作来源。它的 adapter 会遍历带版本的 REST 页面，并从结构化字段标准化 npm 身份，不执行 provider 命令。Provider 版本只作信息展示；自动安装仍然解析 npm `latest`。
 

@@ -1763,7 +1763,7 @@ describe('source mutation boundary', () => {
     expect(update).not.toHaveBeenCalled()
     expect(response.end).not.toHaveBeenCalled()
     for (const event of ['data', 'end', 'error', 'aborted']) expect(request.listenerCount(event)).toBe(0)
-    expect(routeDisposers).toHaveLength(7)
+    expect(routeDisposers).toHaveLength(9)
     for (const routeDispose of routeDisposers) expect(routeDispose).toHaveBeenCalledOnce()
   })
 

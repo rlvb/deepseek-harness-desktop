@@ -215,6 +215,18 @@ const css = `
   margin-top: auto;
 }
 
+.dshMarketInternalProject .dshMarketDetailsIntro {
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, var(--dsw-alias-border-l2));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-tertiary) 24%, var(--dsw-alias-bg-layer-3));
+}
+
+.dshMarketInternalProject .dshMarketOperationFacts {
+  margin-top: 0;
+}
+
 .dshMarketInternalCardActions a {
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
@@ -614,6 +626,18 @@ const css = `
 .dshMarketDetailsIntro > p {
   min-width: 0;
   flex: 1;
+}
+
+.dshMarketInternalReadme {
+  min-width: 0;
+  max-height: 360px;
+  flex: 1;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
 }
 
 .dshMarketDetails p {
