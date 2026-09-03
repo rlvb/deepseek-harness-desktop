@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   MarketCatalogResponse,
   MarketInstallableResponse,
+  MarketInternalPluginsResponse,
   MarketSourceView,
   MarketStateResponse,
 } from '../src/api-types.js'
@@ -15,11 +16,13 @@ import { MarketOverlay, type MarketOverlayProps } from '../src/client/MarketOver
 import { createMarketViewStore } from '../src/client/market-view-store.js'
 import {
   executeMarketOperation,
+  issueMarketInternalInstallTicket,
   mutateMarketSource,
   openMarketTerminal,
   previewMarketOperation,
   readMarketCatalog,
   readMarketInstallable,
+  readMarketInternalPlugins,
   readMarketInstallations,
   readMarketState,
   readMoreMarketCatalog,
@@ -29,11 +32,13 @@ import { en, type MarketLocaleKey } from '../src/client/locales.js'
 
 vi.mock('../src/client/api.js', () => ({
   executeMarketOperation: vi.fn(),
+  issueMarketInternalInstallTicket: vi.fn(),
   mutateMarketSource: vi.fn(),
   openMarketTerminal: vi.fn(),
   previewMarketOperation: vi.fn(),
   readMarketCatalog: vi.fn(),
   readMarketInstallable: vi.fn(),
+  readMarketInternalPlugins: vi.fn(),
   readMarketInstallations: vi.fn(),
   readMoreMarketCatalog: vi.fn(),
   readMarketState: vi.fn(),
@@ -242,6 +247,62 @@ function catalogForSource(
 const catalog = catalogForSource(firstSource)
 
 describe('MarketSettingsTab', () => {
+  it('keeps the private 1024Store directory in a dedicated view and issues a server ticket', async () => {
+    const internal: MarketInternalPluginsResponse = {
+      plugins: [{
+        id: 'enterprise/internal-plugin',
+        name: 'Enterprise Internal Plugin',
+        repository: 'https://tokenapi.chinabeego.com/gitea/enterprise/internal-plugin',
+        category: 'tools',
+        description: { en: 'Internal tool', zh: '内部工具' },
+        added: '2026-09-03',
+        updatedAt: '2026-09-03T00:00:00Z',
+        ownerUsername: 'maintainer',
+        reviewStatus: 'approved',
+        sourceCommit: 'source-commit',
+        approvedCommit: 'approved-commit',
+      }],
+      page: 1,
+      limit: 100,
+      total: 1,
+      totalPages: 1,
+      catalogTotal: 1,
+      categories: [],
+      generatedAt: '2026-09-03T00:00:00Z',
+      identity: {
+        userId: 'user-1',
+        username: 'tester',
+        email: null,
+        groupId: '8',
+        groupName: '8号仓token工厂-openAI',
+        platform: 'openai',
+        canUpload: true,
+        canReview: false,
+      },
+    }
+    vi.mocked(readMarketState).mockResolvedValue(emptyState)
+    vi.mocked(readMarketInternalPlugins).mockResolvedValue(internal)
+    vi.mocked(issueMarketInternalInstallTicket).mockResolvedValue({
+      ok: true,
+      pluginId: internal.plugins[0]!.id,
+      install: 'dsh plugin --profile web add https://tokenapi.chinabeego.com/gitea/enterprise/internal-plugin',
+      ticket: 'ticket-1',
+      expiresAt: '2026-09-03T00:05:00Z',
+    })
+
+    render(<MarketSettingsTab {...props} />)
+    fireEvent.click(await screen.findByRole('button', { name: en.internalPlugins }))
+
+    expect(await screen.findByRole('heading', { name: en.internalPlugins })).toBeTruthy()
+    expect(screen.getByText('Enterprise Internal Plugin')).toBeTruthy()
+    expect(screen.getByText(/8号仓token工厂-openAI/u)).toBeTruthy()
+    expect(readMarketInternalPlugins).toHaveBeenCalledWith('', expect.any(AbortSignal), false)
+
+    fireEvent.click(screen.getByRole('button', { name: en.internalIssueTicket }))
+    expect(await screen.findByText(en.internalTicketIssued)).toBeTruthy()
+    expect(issueMarketInternalInstallTicket).toHaveBeenCalledWith(internal.plugins[0]!.id)
+  })
+
   it('opens on Installable by default', async () => {
     vi.mocked(readMarketState).mockResolvedValue(enabledState)
     vi.mocked(readMarketInstallable).mockResolvedValue(installableResponse([]))

@@ -27,6 +27,9 @@ import type {
   MarketCatalogResponse,
   MarketCatalogSourceResult,
   MarketInstallationView,
+  MarketInternalInstallTicketResponse,
+  MarketInternalPlugin,
+  MarketInternalPluginsResponse,
   MarketInstallableResponse,
   MarketOperationPreviewRequest,
   MarketOperationPreviewResponse,
@@ -37,11 +40,13 @@ import type {
 import { marketMediaAssetUrl } from '../media/ref.js'
 import {
   executeMarketOperation,
+  issueMarketInternalInstallTicket,
   mutateMarketSource,
   openMarketTerminal,
   previewMarketOperation,
   readMarketCatalog,
   readMarketInstallable,
+  readMarketInternalPlugins,
   readMarketInstallations,
   readMarketState,
   readMoreMarketCatalog,
@@ -49,7 +54,7 @@ import {
 } from './api.js'
 
 type MarketItem = CatalogSnapshot['items'][number]
-export type MarketView = 'discover' | 'installable' | 'installed' | 'sources'
+export type MarketView = 'discover' | 'installable' | 'installed' | 'internal' | 'sources'
 const INSTALL_REQUIREMENTS_DOCS = {
   en: 'https://github.com/anywhere-labs/deepseek-harness-desktop/blob/master/dsh-community-market/docs/install-and-uninstall.md',
   zh: 'https://github.com/anywhere-labs/deepseek-harness-desktop/blob/master/dsh-community-market/docs/install-and-uninstall.zh.md',
@@ -133,6 +138,17 @@ function catalogFailureMessage(
       ? t('catalogFailureInvalidResponse')
       : t('catalogFailureUnavailable')
   return `${t('catalogFailureSource')}: ${source.name}. ${reason}`
+}
+
+function internalFailureMessage(cause: unknown, t: MarketSettingsTabProps['t']): string {
+  const code = cause !== null && typeof cause === 'object' && 'code' in cause
+    ? (cause as { readonly code?: unknown }).code
+    : undefined
+  if (code === 'internal-key-required') return t('internalKeyRequired')
+  if (code === 'internal-key-invalid') return t('internalKeyInvalid')
+  if (code === 'internal-permission-denied') return t('internalPermissionDenied')
+  if (code === 'internal-invalid-response') return t('internalInvalidResponse')
+  return t('internalUnavailable')
 }
 
 function PluginIcon({ item, large = false }: { item: MarketItem; large?: boolean }) {
@@ -268,6 +284,14 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
   const [installableLoadingMore, setInstallableLoadingMore] = useState(false)
   const [installableUnavailable, setInstallableUnavailable] = useState(false)
   const [installableError, setInstallableError] = useState<string>()
+  const [internalIndex, setInternalIndex] = useState<MarketInternalPluginsResponse>()
+  const [internalQuery, setInternalQuery] = useState('')
+  const [internalAppliedQuery, setInternalAppliedQuery] = useState('')
+  const [internalLoaded, setInternalLoaded] = useState(false)
+  const [internalLoading, setInternalLoading] = useState(false)
+  const [internalError, setInternalError] = useState<string>()
+  const [internalTicket, setInternalTicket] = useState<MarketInternalInstallTicketResponse>()
+  const [internalTicketPending, setInternalTicketPending] = useState(false)
   const [installationsLoaded, setInstallationsLoaded] = useState(false)
   const [installationsLoading, setInstallationsLoading] = useState(false)
   const [installationsUnavailable, setInstallationsUnavailable] = useState(false)
@@ -287,6 +311,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
   const pageRequest = useRef<AbortController>()
   const mutationRequest = useRef<AbortController>()
   const installableRequest = useRef<AbortController>()
+  const internalRequest = useRef<AbortController>()
   const installationsRequest = useRef<AbortController>()
   const operationRequest = useRef<AbortController>()
   const operationStage = useRef<'preview' | 'execute'>()
@@ -494,11 +519,53 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
     }
   }, [readLocale, t])
 
+  const loadInternal = useCallback(async (refresh = false, q = '') => {
+    internalRequest.current?.abort()
+    const request = new AbortController()
+    internalRequest.current = request
+    setInternalLoading(true)
+    setInternalError(undefined)
+    try {
+      const response = await readMarketInternalPlugins(q, request.signal, refresh)
+      if (request.signal.aborted || internalRequest.current !== request) return
+      setInternalIndex(response)
+      setInternalAppliedQuery(q.trim())
+      setInternalLoaded(true)
+    } catch (cause) {
+      if (request.signal.aborted || internalRequest.current !== request) return
+      setInternalIndex(undefined)
+      setInternalLoaded(false)
+      setInternalError(internalFailureMessage(cause, t))
+    } finally {
+      if (internalRequest.current === request) {
+        internalRequest.current = undefined
+        setInternalLoading(false)
+      }
+    }
+  }, [t])
+
+  const issueInternalTicket = async (plugin: MarketInternalPlugin) => {
+    if (internalTicketPending) return
+    setInternalTicketPending(true)
+    setInternalTicket(undefined)
+    setInternalError(undefined)
+    try {
+      const response = await issueMarketInternalInstallTicket(plugin.id)
+      setInternalTicket(response)
+    } catch (cause) {
+      setInternalError(internalFailureMessage(cause, t))
+    } finally {
+      setInternalTicketPending(false)
+    }
+  }
+
   useEffect(() => {
     setQuery('')
     if (viewRef.current === 'installable') {
       void loadState('', [], false, false)
       void loadInstallable(false, '', [])
+    } else if (viewRef.current === 'internal') {
+      void loadInternal(false, '')
     } else {
       void loadState('', [])
     }
@@ -507,6 +574,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       pageRequest.current?.abort()
       mutationRequest.current?.abort()
       installableRequest.current?.abort()
+      internalRequest.current?.abort()
       installationsRequest.current?.abort()
       operationRequest.current?.abort()
       desktopActionRequest.current?.abort()
@@ -514,11 +582,12 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       pageRequest.current = undefined
       mutationRequest.current = undefined
       installableRequest.current = undefined
+      internalRequest.current = undefined
       installationsRequest.current = undefined
       operationRequest.current = undefined
       desktopActionRequest.current = undefined
     }
-  }, [loadInstallable, loadState])
+  }, [loadInstallable, loadInternal, loadState])
 
   const items = useMemo(() => catalog?.results.flatMap(result =>
     (result.snapshot?.items ?? []).map(item => ({ item, source: result.source, stale: result.stale }))) ?? [], [catalog])
@@ -553,9 +622,11 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
     readRequest.current?.abort()
     pageRequest.current?.abort()
     installableRequest.current?.abort()
+    internalRequest.current?.abort()
     readRequest.current = undefined
     pageRequest.current = undefined
     installableRequest.current = undefined
+    internalRequest.current = undefined
     setLoading(false)
     setLoadingMore(false)
     setLoadMoreError(undefined)
@@ -662,17 +733,26 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
     setOperationErrorDetailsValue(undefined)
     setOperationExecutionFailed(false)
     if (next === 'installable') {
+      internalRequest.current?.abort()
+      internalRequest.current = undefined
+      setInternalLoading(false)
       installationsRequest.current?.abort()
       installationsRequest.current = undefined
       setInstallationsLoading(false)
       void loadInstallable(false, appliedInstallableQuery, installableCategories)
     } else if (next === 'installed') {
+      internalRequest.current?.abort()
+      internalRequest.current = undefined
+      setInternalLoading(false)
       installableRequest.current?.abort()
       installableRequest.current = undefined
       setInstallableLoading(false)
       setInstallableLoadingMore(false)
       void loadInstallations()
     } else if (next === 'discover') {
+      internalRequest.current?.abort()
+      internalRequest.current = undefined
+      setInternalLoading(false)
       installableRequest.current?.abort()
       installationsRequest.current?.abort()
       installableRequest.current = undefined
@@ -683,7 +763,25 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       if (state !== undefined && catalog === undefined && readRequest.current === undefined) {
         void loadCatalog(state, appliedQuery, selectedCategories)
       }
+    } else if (next === 'internal') {
+      readRequest.current?.abort()
+      pageRequest.current?.abort()
+      installableRequest.current?.abort()
+      installationsRequest.current?.abort()
+      readRequest.current = undefined
+      pageRequest.current = undefined
+      installableRequest.current = undefined
+      installationsRequest.current = undefined
+      setLoading(false)
+      setLoadingMore(false)
+      setInstallableLoading(false)
+      setInstallableLoadingMore(false)
+      setInstallationsLoading(false)
+      void loadInternal(false, internalAppliedQuery)
     } else {
+      internalRequest.current?.abort()
+      internalRequest.current = undefined
+      setInternalLoading(false)
       installableRequest.current?.abort()
       installationsRequest.current?.abort()
       installableRequest.current = undefined
@@ -884,7 +982,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
     <section
       className="dshMarketRoot"
       aria-label={t('title')}
-      aria-busy={loading || loadingMore || mutationPending || installationsLoading || operationPending || desktopActionPending}
+      aria-busy={loading || loadingMore || mutationPending || installationsLoading || internalLoading || internalTicketPending || operationPending || desktopActionPending}
     >
       {showHeader && (
         <header className="dshMarketHeader">
@@ -905,12 +1003,17 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
           <Pill active={view === 'installed'} aria-pressed={view === 'installed'} onClick={() => selectMarketView('installed')}>
             <IconCheckOutline16 size={14} /><span>{t('installed')}</span>
           </Pill>
+          <Pill active={view === 'internal'} aria-pressed={view === 'internal'} onClick={() => selectMarketView('internal')}>
+            <IconCordisPluginOutline14 size={14} /><span>{t('internalPlugins')}</span>
+          </Pill>
           <Pill active={view === 'sources'} aria-pressed={view === 'sources'} onClick={() => selectMarketView('sources')}>
             <IconSettingsOutline16 size={14} /><span>{t('sources')}</span>
           </Pill>
         </div>
         <Pill className="dshMarketCurrentSource">
-          {currentSource === undefined
+          {view === 'internal'
+            ? t('internalSource')
+            : currentSource === undefined
             ? t('noSourceSelected')
             : currentSourceHref === undefined
               ? `${t('currentSource')}: ${currentSource.name}`
@@ -981,6 +1084,23 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
             onRetry={() => { void loadInstallable(false, appliedInstallableQuery, installableCategories) }}
             onSources={() => selectMarketView('sources')}
             onInstall={openItem}
+            t={t}
+          />
+        ) : view === 'internal' ? (
+          <InternalPluginsView
+            index={internalIndex}
+            query={internalQuery}
+            loaded={internalLoaded}
+            loading={internalLoading}
+            error={internalError}
+            ticket={internalTicket}
+            ticketPending={internalTicketPending}
+            locale={readLocale()}
+            onQuery={setInternalQuery}
+            onSearch={() => { void loadInternal(false, internalQuery) }}
+            onRefresh={() => { void loadInternal(true, internalAppliedQuery) }}
+            onRetry={() => { void loadInternal(false, internalAppliedQuery) }}
+            onIssueTicket={plugin => { void issueInternalTicket(plugin) }}
             t={t}
           />
         ) : view === 'installed' ? (
@@ -1111,6 +1231,104 @@ export function MarketSettingsTab({ initialView, readLocale, t }: MarketSettings
     readLocale={readLocale}
     t={t}
   />
+}
+
+function InternalPluginsView(props: {
+  index?: MarketInternalPluginsResponse | undefined
+  query: string
+  locale: string
+  loaded: boolean
+  loading: boolean
+  error?: string | undefined
+  ticket?: MarketInternalInstallTicketResponse | undefined
+  ticketPending: boolean
+  onQuery: (value: string) => void
+  onSearch: () => void
+  onRefresh: () => void
+  onRetry: () => void
+  onIssueTicket: (plugin: MarketInternalPlugin) => void
+  t: MarketSettingsTabProps['t']
+}) {
+  const chinese = props.locale.toLowerCase().startsWith('zh')
+  if (!props.loaded && props.loading) return (
+    <div className="dshMarketEmpty"><StateDot state="ongoing" size={16} /><p>{props.t('internalLoading')}</p></div>
+  )
+  if (!props.loaded && props.error !== undefined) return (
+    <div className="dshMarketEmpty" role="alert">
+      <StateDot state="error" size={14} />
+      <h2>{props.t('internalUnavailableTitle')}</h2>
+      <p>{props.error}</p>
+      <Button variant="outline" icon={<IconRefreshOutline16 />} onClick={props.onRetry}>{props.t('retry')}</Button>
+    </div>
+  )
+  const plugins = props.index?.plugins ?? []
+  return (
+    <div className="dshMarketContent dshMarketInternalContent">
+      <div className="dshMarketInternalBanner">
+        <div className="dshMarketInternalBannerIcon"><IconCordisPluginOutline14 size={18} /></div>
+        <div>
+          <strong>{props.t('internalAccessTitle')}</strong>
+          <p>{props.t('internalAccessBody')}</p>
+          {props.index?.identity !== undefined && (
+            <small>{props.t('internalSignedInAs')}: {props.index.identity.username} · {props.index.identity.groupName}</small>
+          )}
+        </div>
+      </div>
+      <div className="dshMarketSectionHead">
+        <div><h2>{props.t('internalPlugins')}</h2><p>{props.t('internalPluginsBody')}</p></div>
+        <Button variant="outline" size="sm" disabled={props.loading || props.ticketPending} icon={<IconRefreshOutline16 />} onClick={props.onRefresh}>{props.t('refresh')}</Button>
+      </div>
+      <form className="dshMarketToolbar" onSubmit={event => { event.preventDefault(); props.onSearch() }}>
+        <Input
+          className="dshMarketSearch"
+          icon={<IconSearchOutline16 />}
+          value={props.query}
+          disabled={props.loading || props.ticketPending}
+          placeholder={props.t('internalSearch')}
+          onChange={event => props.onQuery(event.currentTarget.value)}
+        />
+        <Button type="submit" variant="primary" disabled={props.loading || props.ticketPending} icon={<IconSearchOutline16 />}>{props.t('searchAction')}</Button>
+        <Pill>{props.index?.total ?? plugins.length}</Pill>
+      </form>
+      {props.error !== undefined && <div className="dshMarketBanner" role="alert"><StateDot state="error" />{props.error}</div>}
+      {props.ticket !== undefined && (
+        <div className="dshMarketInternalTicket" role="status">
+          <strong>{props.t('internalTicketIssued')}</strong>
+          <span>{props.t('internalTicketExpires')}: {props.ticket.expiresAt}</span>
+          <code>{props.ticket.ticket}</code>
+          <span>{props.ticket.install}</span>
+        </div>
+      )}
+      {plugins.length === 0 ? (
+        <div className="dshMarketEmpty"><h2>{props.t('internalNoPlugins')}</h2><p>{props.t('internalNoPluginsBody')}</p></div>
+      ) : (
+        <div className="dshMarketInternalGrid">
+          {plugins.map(plugin => (
+            <article className="dshMarketInternalCard" key={plugin.id}>
+              <div className="dshMarketCardTop">
+                <div className="dshMarketInternalGlyph"><IconCordisPluginOutline14 size={22} /></div>
+                <div className="dshMarketCardName"><strong>{plugin.name}</strong><span>{plugin.id}</span></div>
+              </div>
+              <p className="dshMarketSummary">{chinese ? plugin.description.zh : plugin.description.en}</p>
+              <div className="dshMarketTags">
+                <Pill>{plugin.category}</Pill>
+                <Pill>{plugin.ownerUsername}</Pill>
+              </div>
+              <div className="dshMarketInternalCardActions">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={props.ticketPending}
+                  onClick={() => props.onIssueTicket(plugin)}
+                >{props.ticketPending ? '…' : props.t('internalIssueTicket')}</Button>
+                <a href={plugin.repository} target="_blank" rel="noopener noreferrer">{props.t('repository')}</a>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function DiscoverView(props: {

@@ -61,6 +61,11 @@ export interface CatalogHttpRequestPolicy {
   readonly allowedOrigin?: string
   /** Bypass and replace any completed or in-flight catalog response cache entry. */
   readonly cacheMode?: 'default' | 'reload'
+  /**
+   * Host-only headers for a compiled-in first-party endpoint. These headers
+   * are never accepted from catalog manifests or returned to the Client.
+   */
+  readonly requestHeaders?: Readonly<Record<string, string>>
 }
 
 export interface CatalogHttpResponse {

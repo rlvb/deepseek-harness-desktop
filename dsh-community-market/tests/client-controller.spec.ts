@@ -14,11 +14,15 @@ describe('community market view store', () => {
     })
 
     expect(marketView.getSnapshot().open).toBe(false)
+    expect(marketView.getSnapshot().initialView).toBe('discover')
     marketView.actions.open()
     marketView.actions.open()
     expect(marketView.getSnapshot().open).toBe(true)
     expect(listener).toHaveBeenLastCalledWith(true)
     expect(listener).toHaveBeenCalledOnce()
+
+    marketView.actions.openInternal()
+    expect(marketView.getSnapshot()).toMatchObject({ open: true, initialView: 'internal' })
 
     marketView.actions.close()
     marketView.actions.close()

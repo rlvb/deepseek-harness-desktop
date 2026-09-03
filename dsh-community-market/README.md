@@ -36,6 +36,16 @@ The Installed view is derived from the active Profile's direct dependencies and 
 
 Uninstall preview accepts only the generation-scoped opaque `bundleId` returned by Desktop inventory. The Host resolves it to the current direct dependency, confirms it is removable, and runs `desktopPnpm.run(['remove', packageName])`. The Market does not provide enable or disable operations.
 
+## Private internal catalog
+
+The enterprise build exposes a separate **Internal plugins** view in addition to the public catalog. It talks to the private DSH 1024Store internal API and never merges internal entries into the public catalog, pagination, or cache. The sidebar exposes both the regular market entry and a direct Internal plugins shortcut.
+
+All internal requests stay in the Host. The Host reads `BHCTOKENAPI_API_KEY` through the `dsh-sub2api` `dshSub2ApiCredentials` capability, calls `/api/v1/internal/auth/me`, and then calls `/api/v2/internal/plugins` for the signed-in account's approved entries. GPT and GPTVIP keys are not used for internal-market authorization. The raw Key never enters the Renderer, URL, localStorage, public cache, or logs.
+
+Internal cards expose only the server-approved safe projection and require `reviewStatus=approved`. When the user requests installation, the Host calls the internal install-ticket endpoint and displays the short-lived, single-use ticket and server-provided instructions. This version does not execute server-provided commands; true one-click installation requires a controlled package proxy or enterprise repository plus a separate Host installer adapter.
+
+The UI maps `internal-key-required` to a missing OpenAI-group Key, `internal-key-invalid` to an invalid/expired Key, `internal-permission-denied` to a missing internal-catalog permission, and `internal-service-unavailable` to a private Store/network outage. Directory reads revalidate `auth/me`, so account or group changes take effect without restarting DSH.
+
 ## Catalog sources
 
 Anyone may publish a source implementing the public [`catalog-source`](docs/schemas/catalog-source.schema.json) and [`catalog-provider-page`](docs/schemas/catalog-provider-page.schema.json) contracts. Existing APIs can be integrated through reviewed local adapters. Remote source data is normalized before the Client sees it, and provider commands are never displayed or executed.

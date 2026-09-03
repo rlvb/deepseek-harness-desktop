@@ -15,6 +15,7 @@ export type MarketOverlayProps = PropsRuntime<'shell.overlay'>
 
 export function MarketOverlay({ useStore, actions, readLocale, t, initialView }: MarketOverlayProps) {
   const open = useStore(state => state.open)
+  const launchView = useStore(state => state.initialView)
   const panel = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -51,7 +52,7 @@ export function MarketOverlay({ useStore, actions, readLocale, t, initialView }:
         </header>
         <div className="dshMarketOverlayBody">
           <MarketSurface
-            {...(initialView === undefined ? {} : { initialView })}
+            {...(initialView === undefined ? { initialView: launchView } : { initialView })}
             readLocale={readLocale}
             showHeader={false}
             t={t}

@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {} from '../src/client/index.js'
-import { MarketLauncher, type MarketLauncherProps } from '../src/client/MarketLauncher.js'
+import { InternalMarketLauncher, MarketLauncher, type MarketLauncherProps } from '../src/client/MarketLauncher.js'
 import { createMarketViewStore } from '../src/client/market-view-store.js'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
@@ -25,7 +25,7 @@ const t = ((key: string) => key) as PropsLocale<'community-market'>['t']
 describe('community market launcher', () => {
   it('opens the market and reflects narrow versus wide sidebar presentation', () => {
     const instance = createMarketViewStore().create()
-    const useStore = <T,>(selector: (state: { open: boolean }) => T): T => useSyncExternalStore(
+    const useStore = <T,>(selector: (state: { open: boolean; initialView: 'discover' | 'internal' }) => T): T => useSyncExternalStore(
       instance.subscribe,
       () => selector(instance.getSnapshot()),
     )
@@ -52,5 +52,27 @@ describe('community market launcher', () => {
     rerender(<MarketLauncher {...props} wide />)
     expect(button.getAttribute('data-wide')).toBe('true')
     expect(button.textContent).toContain('tab')
+  })
+
+  it('opens the private internal catalog directly from the dedicated entry', () => {
+    const instance = createMarketViewStore().create()
+    const useStore = <T,>(selector: (state: { open: boolean; initialView: 'discover' | 'internal' }) => T): T => useSyncExternalStore(
+      instance.subscribe,
+      () => selector(instance.getSnapshot()),
+    )
+    const props = {
+      wide: true,
+      actions: instance.actions,
+      useStore,
+      t,
+      useSessions: (() => undefined) as MarketLauncherProps['useSessions'],
+      useSessionPendingInteraction: (() => undefined) as MarketLauncherProps['useSessionPendingInteraction'],
+      useWorkspaces: (() => undefined) as MarketLauncherProps['useWorkspaces'],
+    } satisfies MarketLauncherProps
+
+    render(<InternalMarketLauncher {...props} />)
+    const button = screen.getByRole('button', { name: 'internalPlugins' })
+    fireEvent.click(button)
+    expect(instance.getSnapshot()).toMatchObject({ open: true, initialView: 'internal' })
   })
 })

@@ -2,6 +2,8 @@ import type {
   MarketCatalogResponse,
   MarketDesktopActionResponse,
   MarketInstallableResponse,
+  MarketInternalInstallTicketResponse,
+  MarketInternalPluginsResponse,
   MarketInstallationsResponse,
   MarketOperationExecuteResponse,
   MarketOperationPreviewRequest,
@@ -124,6 +126,32 @@ export async function readMarketInstallable(
   if (options.refresh === true) url.searchParams.set('refresh', '1')
   return await readJson(await fetch(url, {
     cache: 'no-store',
+    ...(signal === undefined ? {} : { signal }),
+  }))
+}
+
+export async function readMarketInternalPlugins(
+  q = '',
+  signal?: AbortSignal,
+  refresh = false,
+): Promise<MarketInternalPluginsResponse> {
+  const url = new URL('/api/community-market/internal/plugins', window.location.origin)
+  if (q.trim()) url.searchParams.set('q', q.trim())
+  if (refresh) url.searchParams.set('refresh', '1')
+  return await readJson(await fetch(url, {
+    cache: 'no-store',
+    ...(signal === undefined ? {} : { signal }),
+  }))
+}
+
+export async function issueMarketInternalInstallTicket(
+  pluginId: string,
+  signal?: AbortSignal,
+): Promise<MarketInternalInstallTicketResponse> {
+  return await readJson(await fetch('/api/community-market/internal/install-ticket', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pluginId }),
     ...(signal === undefined ? {} : { signal }),
   }))
 }

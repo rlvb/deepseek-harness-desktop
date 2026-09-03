@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MarketSourceMutation } from '../src/api-types.js'
 import {
   executeMarketOperation,
+  issueMarketInternalInstallTicket,
   MarketApiError,
   mutateMarketSource,
   openMarketTerminal,
   previewMarketOperation,
   readMarketCatalog,
   readMarketInstallable,
+  readMarketInternalPlugins,
   readMarketInstallations,
   readMarketState,
   readMoreMarketCatalog,
@@ -20,6 +22,28 @@ afterEach(() => {
 })
 
 describe('community market client API', () => {
+  it('uses local Host routes for private internal directory reads and ticket issuance', async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ plugins: [], page: 1, limit: 100, total: 0, totalPages: 0, catalogTotal: 0, categories: [], generatedAt: '2026-09-03T00:00:00Z', identity: {} }),
+    } as Response))
+    vi.stubGlobal('fetch', fetch)
+
+    await readMarketInternalPlugins(' private tool ')
+    await issueMarketInternalInstallTicket('owner/plugin')
+
+    expect(fetch.mock.calls[0]?.[0]).toBeInstanceOf(URL)
+    expect(String(fetch.mock.calls[0]?.[0])).toContain('/api/community-market/internal/plugins?q=private+tool')
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' })
+    expect(fetch.mock.calls[1]).toEqual([
+      '/api/community-market/internal/install-ticket',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ pluginId: 'owner/plugin' }),
+      }),
+    ])
+  })
+
   it('binds the initial page to one source, requests 50 items, and repeats category parameters', async () => {
     const fetch = vi.fn(async (_input: RequestInfo | URL) => ({
       ok: true,

@@ -79,7 +79,7 @@ const t = ((key: string) => key) as PropsLocale<'community-market'>['t']
 
 function renderOpenOverlay() {
   const instance = createMarketViewStore().create()
-  const useStore = <T,>(selector: (state: { open: boolean }) => T): T => useSyncExternalStore(
+  const useStore = <T,>(selector: (state: { open: boolean; initialView: 'discover' | 'internal' }) => T): T => useSyncExternalStore(
     instance.subscribe,
     () => selector(instance.getSnapshot()),
   )

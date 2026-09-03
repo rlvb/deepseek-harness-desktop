@@ -59,3 +59,25 @@ export function MarketLauncher({ wide, useStore, actions, t }: MarketLauncherPro
     </Tooltip>
   )
 }
+
+/** Direct sidebar entry for the private, permission-gated internal catalog. */
+export function InternalMarketLauncher(props: MarketLauncherProps) {
+  const { wide, useStore, actions, t } = props
+  const open = useStore(state => state.open)
+  return (
+    <Tooltip label={t('internalPlugins')} delayMs={500} disabled={wide}>
+      <Button
+        variant="ghost"
+        className="dshMarketLauncher dshMarketInternalLauncher"
+        data-wide={wide}
+        aria-label={t('internalPlugins')}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        icon={<MarketStoreIcon size={wide ? 16 : 18} />}
+        onClick={() => actions.openInternal()}
+      >
+        {wide ? t('internalPlugins') : null}
+      </Button>
+    </Tooltip>
+  )
+}

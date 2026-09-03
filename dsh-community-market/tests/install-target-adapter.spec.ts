@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   DSH_1024STORE_ADAPTER_ID,
+  DSH_1024STORE_ENDPOINT,
   DSH_1024STORE_KEY,
   DSH_1024STORE_PROVIDER_ID,
   dsh1024StoreAdapter,
@@ -187,8 +188,8 @@ describe('1024Store v2 install target normalization', () => {
 
     expect(getJson).toHaveBeenCalledTimes(2)
     expect(getJson.mock.calls.map(call => call[0])).toEqual([
-      'https://deepseek1024.com/api/v2/plugins?page=1&limit=200',
-      'https://deepseek1024.com/api/v2/plugins?page=2&limit=200',
+      `${DSH_1024STORE_ENDPOINT}?page=1&limit=200`,
+      `${DSH_1024STORE_ENDPOINT}?page=2&limit=200`,
     ])
     expect(snapshots.map(snapshot => snapshot.items.length)).toEqual([200, 5])
     expect(snapshots.every(snapshot => snapshot.page.total === 205)).toBe(true)
@@ -219,9 +220,9 @@ describe('1024Store v2 install target normalization', () => {
     })
 
     expect(getJson).toHaveBeenCalledWith(
-      'https://deepseek1024.com/api/v2/plugins?page=1&limit=25&q=context+menu&category=ui&sort=installs',
+      `${DSH_1024STORE_ENDPOINT}?page=1&limit=25&q=context+menu&category=ui&sort=installs`,
       expect.any(AbortSignal),
-      { allowedOrigin: 'https://deepseek1024.com' },
+      { allowedOrigin: 'https://tokenapi.chinabeego.com:9443' },
     )
   })
 

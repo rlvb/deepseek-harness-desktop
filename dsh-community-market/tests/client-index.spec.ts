@@ -65,7 +65,7 @@ describe('community market client registration', () => {
     expect(NS).toBe('community-market')
   })
 
-  it('registers locale, styles, settings tab, sidebar launcher, and shell overlay effects', () => {
+  it('registers locale, styles, settings tab, public/internal sidebar launchers, and shell overlay effects', () => {
     const test = testContext()
 
     apply(test.context)
@@ -77,6 +77,7 @@ describe('community market client registration', () => {
     expect(test.injections.map(value => value.name)).toEqual([
       'settings.plugins.tab',
       'sidebar.footer.action',
+      'sidebar.footer.action',
       'shell.overlay',
     ])
   })
@@ -87,7 +88,7 @@ describe('community market client registration', () => {
     apply(test.context)
     test.injections.forEach(value => { value.factory() })
 
-    expect(test.registrations).toHaveLength(3)
+    expect(test.registrations).toHaveLength(4)
     expect(test.registrations.map(value => value.spec)).toEqual([
       expect.objectContaining({
         name: 'settings.plugins.tab',
@@ -102,17 +103,25 @@ describe('community market client registration', () => {
         locale: NS,
       }),
       expect.objectContaining({
+        name: 'sidebar.footer.action',
+        id: 'community-market-internal',
+        order: 11,
+        locale: NS,
+      }),
+      expect.objectContaining({
         name: 'shell.overlay',
         id: 'community-market',
         order: 10,
         locale: NS,
       }),
     ])
-    const [settings, launcher, overlay] = test.registrations.map(value => value.spec)
+    const [settings, launcher, internalLauncher, overlay] = test.registrations.map(value => value.spec)
     expect(typeof settings?.label).toBe('function')
     expect(typeof settings?.inject).toBe('function')
     expect(typeof launcher?.label).toBe('function')
+    expect(typeof internalLauncher?.label).toBe('function')
     expect(launcher?.store).toBe(overlay?.store)
+    expect(internalLauncher?.store).toBe(overlay?.store)
     expect(typeof overlay?.inject).toBe('function')
   })
 })

@@ -5,6 +5,8 @@ import {
   registerMarketRoutes,
   registerMarketSettings,
   type MarketDesktopPlugins,
+  type MarketInternalCredentials,
+  type MarketInternalCredentialsProvider,
 } from './host/routes.js'
 import { createRestrictedHttpClient } from './network/restricted-http.js'
 import {
@@ -36,13 +38,34 @@ export function apply(ctx: Context): void {
   let installService: MarketInstallService | undefined
   let desktopActions: DesktopActionsCapability | undefined
   let desktopPlugins: MarketDesktopPlugins | undefined
+  let internalCredentials: MarketInternalCredentials | undefined
   const installProvider = { get: () => installService }
   const desktopActionsProvider = { get: () => desktopActions }
   const desktopPluginsProvider = { get: () => desktopPlugins }
+  const internalCredentialsProvider: MarketInternalCredentialsProvider = { get: () => internalCredentials }
   ctx.effect(
-    () => registerMarketRoutes(ctx, scope, installProvider, desktopActionsProvider, desktopPluginsProvider),
+    () => registerMarketRoutes(
+      ctx,
+      scope,
+      installProvider,
+      desktopActionsProvider,
+      desktopPluginsProvider,
+      internalCredentialsProvider,
+    ),
     'community-market: routes',
   )
+  // dsh-sub2api is a first-party optional Host capability. Keeping the
+  // injection optional lets the public market remain usable in standalone
+  // Harness profiles while enabling the private 1024Store when present.
+  ctx.inject(['dshSub2ApiCredentials'], (credentialsCtx) => {
+    const credentials = credentialsCtx.get('dshSub2ApiCredentials') as MarketInternalCredentials
+    credentialsCtx.effect(() => {
+      internalCredentials = credentials
+      return () => {
+        if (internalCredentials === credentials) internalCredentials = undefined
+      }
+    }, 'community-market: optional private market credentials')
+  })
   ctx.inject(['desktopActions'], (desktopCtx) => {
     const actions = desktopCtx.get('desktopActions') as DesktopActionsCapability
     desktopCtx.effect(() => {

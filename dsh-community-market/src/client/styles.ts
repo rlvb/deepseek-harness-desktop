@@ -133,6 +133,120 @@ const css = `
   gap: 10px;
 }
 
+.dshMarketInternalContent {
+  padding: 2px 0;
+}
+
+.dshMarketInternalBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 35%, var(--dsw-alias-border-l2));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-tertiary) 70%, var(--dsw-alias-bg-layer-3));
+}
+
+.dshMarketInternalBannerIcon,
+.dshMarketInternalGlyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.dshMarketInternalBannerIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.dshMarketInternalBanner strong {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.dshMarketInternalBanner p,
+.dshMarketInternalBanner small {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dshMarketInternalBanner small {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dshMarketInternalGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dshMarketInternalCard {
+  display: flex;
+  min-width: 0;
+  min-height: 175px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, var(--dsw-alias-border-l2));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-tertiary) 28%, var(--dsw-alias-bg-layer-3));
+}
+
+.dshMarketInternalGlyph {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-business-tertiary);
+}
+
+.dshMarketInternalCardActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.dshMarketInternalCardActions a {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dshMarketInternalTicket {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-state-success-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dshMarketInternalTicket strong {
+  color: var(--dsw-alias-label-primary);
+}
+
+.dshMarketInternalTicket code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: var(--dsw-font-family-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+}
+
 .dshMarketCard {
   appearance: none;
   display: flex;

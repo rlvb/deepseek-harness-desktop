@@ -14,6 +14,10 @@ import type {
   MarketCatalogResponse,
   MarketCatalogSourceResult,
   MarketInstallationView,
+  MarketInternalIdentity,
+  MarketInternalInstallTicketResponse,
+  MarketInternalPlugin,
+  MarketInternalPluginsResponse,
   MarketManualInstallHint,
   MarketSourceMutation,
   MarketStateResponse,
@@ -84,6 +88,9 @@ const ROUTE_OPEN_TERMINAL = '/api/community-market/desktop/open-terminal'
 const ROUTE_REQUEST_RESTART = '/api/community-market/desktop/request-restart'
 const ROUTE_OPERATION_PREVIEW = '/api/community-market/operations/preview'
 const ROUTE_OPERATION_EXECUTE = '/api/community-market/operations/execute'
+const ROUTE_INTERNAL_AUTH = '/api/community-market/internal/auth'
+const ROUTE_INTERNAL_PLUGINS = '/api/community-market/internal/plugins'
+const ROUTE_INTERNAL_INSTALL_TICKET = '/api/community-market/internal/install-ticket'
 const MAX_BODY_BYTES = 16 * 1024
 // v2 is paginated, so the reviewed provider no longer needs the old full-body
 // exception. Keep a per-page ceiling independent of the complete catalog size.
@@ -98,6 +105,28 @@ const dsh1024StoreHttpClient = createCachedCatalogHttpClient(
     maxBodyBytes: MAX_DSH_1024STORE_BODY_BYTES,
   }),
 )
+
+// Internal entries are user-specific and must never enter the public catalog
+// cache. The origin and path prefix are compiled into this first-party
+// integration; the only variable request value is the Host-only bearer Key.
+export const dsh1024StoreInternalHttpClient = createRestrictedHttpClient({
+  syntheticProxyHostnames: [DSH_1024STORE_HOSTNAME],
+  allowedHttpsOrigins: [DSH_1024STORE_ORIGIN],
+  maxBodyBytes: MAX_DSH_1024STORE_BODY_BYTES,
+})
+
+const INTERNAL_API_PREFIX = `${DSH_1024STORE_ORIGIN}/dsh-market/api`
+const INTERNAL_AUTH_URL = `${INTERNAL_API_PREFIX}/v1/internal/auth/me`
+const INTERNAL_PLUGINS_URL = `${INTERNAL_API_PREFIX}/v2/internal/plugins`
+
+export interface MarketInternalCredentials {
+  /** Returns the Sub2API OpenAI group Key only inside trusted Host code. */
+  readOpenAiGroupKey(): string | undefined
+}
+
+export interface MarketInternalCredentialsProvider {
+  get(): MarketInternalCredentials | undefined
+}
 
 const dshfindHttpClient = createCachedCatalogHttpClient(
   createRestrictedHttpClient({
@@ -115,6 +144,166 @@ function sendJson(res: ServerResponse, status: number, value: unknown): void {
   res.setHeader('cache-control', 'no-store')
   res.setHeader('x-content-type-options', 'nosniff')
   res.end(body)
+}
+
+class InternalMarketError extends Error {
+  constructor(
+    readonly status: 400 | 401 | 403 | 502 | 503,
+    readonly code: 'internal-invalid-request' | 'internal-key-required' | 'internal-key-invalid' | 'internal-permission-denied' | 'internal-service-unavailable' | 'internal-invalid-response',
+    message: string,
+  ) {
+    super(message)
+    this.name = 'InternalMarketError'
+  }
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function boundedText(value: unknown, maxLength: number): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength
+    ? value
+    : undefined
+}
+
+function safeInternalRepository(value: unknown): string | undefined {
+  const repository = boundedText(value, 1_000)
+  if (repository === undefined) return undefined
+  try {
+    const url = new URL(repository)
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return undefined
+    return url.href
+  } catch {
+    return undefined
+  }
+}
+
+function internalIdentity(value: unknown): MarketInternalIdentity {
+  const source = recordValue(value)
+  const platform = source?.platform
+  const identity = {
+    userId: boundedText(source?.userId, 160),
+    username: boundedText(source?.username, 160),
+    email: source?.email === null ? null : boundedText(source?.email, 320),
+    groupId: boundedText(source?.groupId, 160),
+    groupName: boundedText(source?.groupName, 200),
+    platform,
+    canUpload: source?.canUpload,
+    canReview: source?.canReview,
+  }
+  if (identity.userId === undefined
+    || identity.username === undefined
+    || identity.groupId === undefined
+    || identity.groupName === undefined
+    || identity.platform !== 'openai'
+    || typeof identity.canUpload !== 'boolean'
+    || typeof identity.canReview !== 'boolean') {
+    throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid identity.')
+  }
+  return identity as MarketInternalIdentity
+}
+
+function internalPlugin(value: unknown): MarketInternalPlugin | undefined {
+  const source = recordValue(value)
+  if (source?.reviewStatus !== 'approved') return undefined
+  const id = boundedText(source.id, 256)
+  const name = boundedText(source.name, 200)
+  const repository = safeInternalRepository(source.repository)
+  const category = boundedText(source.category, 80)
+  const description = recordValue(source.description)
+  const en = boundedText(description?.en, 2_000)
+  const zh = boundedText(description?.zh, 2_000)
+  const added = boundedText(source.added, 32)
+  const updatedAt = boundedText(source.updatedAt, 64) ?? boundedText(source.createdAt, 64)
+  const ownerUsername = boundedText(source.ownerUsername, 160)
+  if (id === undefined || name === undefined || repository === undefined || category === undefined
+    || en === undefined || zh === undefined || added === undefined || updatedAt === undefined
+    || ownerUsername === undefined) return undefined
+  return {
+    id,
+    name,
+    repository,
+    category,
+    description: { en, zh },
+    added,
+    ...(typeof source.install === 'string' && source.install.length <= 500 ? { install: source.install } : {}),
+    updatedAt,
+    ownerUsername,
+    reviewStatus: 'approved',
+    sourceCommit: typeof source.sourceCommit === 'string' || source.sourceCommit === null ? source.sourceCommit : null,
+    approvedCommit: typeof source.approvedCommit === 'string' || source.approvedCommit === null ? source.approvedCommit : null,
+  }
+}
+
+function internalPluginsResponse(value: unknown): MarketInternalPluginsResponse {
+  const source = recordValue(value)
+  const rawPlugins = source?.plugins
+  const rawCategories = source?.categories
+  if (source === undefined || !Array.isArray(rawPlugins) || !Array.isArray(rawCategories)) {
+    throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid plugin directory.')
+  }
+  const plugins = rawPlugins.flatMap(plugin => {
+    const normalized = internalPlugin(plugin)
+    return normalized === undefined ? [] : [normalized]
+  })
+  const categories = rawCategories.flatMap(category => {
+    const item = recordValue(category)
+    const id = boundedText(item?.id, 80)
+    const en = boundedText(item?.en, 160)
+    const zh = boundedText(item?.zh, 160)
+    const count = item?.count
+    return id !== undefined && en !== undefined && zh !== undefined
+      && typeof count === 'number' && Number.isSafeInteger(count) && count >= 0
+      ? [{ id, en, zh, count }]
+      : []
+  })
+  const numberOr = (value: unknown, fallback: number): number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : fallback
+  return {
+    plugins,
+    page: numberOr(source.page, 1),
+    limit: numberOr(source.limit, plugins.length),
+    total: numberOr(source.total, plugins.length),
+    totalPages: numberOr(source.totalPages, plugins.length === 0 ? 0 : 1),
+    catalogTotal: numberOr(source.catalogTotal, plugins.length),
+    categories,
+    generatedAt: boundedText(source.generatedAt, 64) ?? new Date().toISOString(),
+    identity: internalIdentity(source.identity),
+  }
+}
+
+function internalKey(provider: MarketInternalCredentialsProvider | undefined): string {
+  let key = ''
+  try { key = provider?.get()?.readOpenAiGroupKey()?.trim() ?? '' } catch { key = '' }
+  if (key.length === 0) {
+    throw new InternalMarketError(401, 'internal-key-required', '请先在“8号仓 Token 工厂”配置 OpenAI 分组 Key。')
+  }
+  return key
+}
+
+function internalPolicy(key: string) {
+  return {
+    allowedOrigin: DSH_1024STORE_ORIGIN,
+    cacheMode: 'reload' as const,
+    requestHeaders: { Authorization: `Bearer ${key}` },
+  }
+}
+
+function internalFailure(cause: unknown): InternalMarketError {
+  if (cause instanceof InternalMarketError) return cause
+  if (cause instanceof CatalogNetworkError) {
+    if (cause.statusCode === 401) return new InternalMarketError(401, 'internal-key-invalid', '当前 OpenAI 分组 Key 无效或已失效，请刷新“8号仓 Token 工厂”。')
+    if (cause.statusCode === 403) return new InternalMarketError(403, 'internal-permission-denied', '当前账号没有访问内部插件目录的权限。')
+  }
+  return new InternalMarketError(503, 'internal-service-unavailable', '私有 DSH 1024Store 暂时不可用，请稍后重试。')
+}
+
+function sendInternalFailure(res: ServerResponse, cause: unknown): void {
+  const error = internalFailure(cause)
+  sendJson(res, error.status, { error: error.message, code: error.code })
 }
 
 function sendInstallError(res: ServerResponse, cause: unknown): void {
@@ -662,6 +851,7 @@ export function registerMarketRoutes(
   installProvider?: MarketInstallServiceProvider,
   desktopActionsProvider?: MarketDesktopActionsProvider,
   desktopPluginsProvider?: MarketDesktopPluginsProvider,
+  internalCredentialsProvider?: MarketInternalCredentialsProvider,
 ): () => void {
   const expectedPort = ctx.webServer.port
   const generationController = new AbortController()
@@ -747,6 +937,116 @@ export function registerMarketRoutes(
         if (!generationController.signal.aborted && !res.destroyed) sendJson(res, 200, response)
       } catch {
         if (!generationController.signal.aborted && !res.destroyed) sendJson(res, 500, { error: 'market state unavailable' })
+      }
+    }}),
+    ctx.webServer.register({ kind: 'exact', path: ROUTE_INTERNAL_AUTH, handler: async (req, res) => {
+      if (req.method !== 'GET' || !requestAllowed(req, expectedPort)) {
+        sendJson(res, 405, { error: 'internal market authentication requires a local GET' })
+        return
+      }
+      const controller = new AbortController()
+      const signal = AbortSignal.any([controller.signal, generationController.signal])
+      const stopWatching = abortOnDisconnect(req, res, controller)
+      try {
+        const key = internalKey(internalCredentialsProvider)
+        const response = await dsh1024StoreInternalHttpClient.getJson(
+          INTERNAL_AUTH_URL,
+          signal,
+          internalPolicy(key),
+        )
+        const payload = recordValue(response.value)
+        if (payload?.ok !== true) throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid authentication response.')
+        if (!signal.aborted && !res.destroyed) sendJson(res, 200, { ok: true, identity: internalIdentity(payload.identity) })
+      } catch (cause) {
+        if (!signal.aborted && !res.destroyed) sendInternalFailure(res, cause)
+      } finally {
+        stopWatching()
+      }
+    }}),
+    ctx.webServer.register({ kind: 'exact', path: ROUTE_INTERNAL_PLUGINS, handler: async (req, res) => {
+      if (req.method !== 'GET' || !requestAllowed(req, expectedPort)) {
+        sendJson(res, 405, { error: 'internal plugin catalog requires a local GET' })
+        return
+      }
+      const controller = new AbortController()
+      const signal = AbortSignal.any([controller.signal, generationController.signal])
+      const stopWatching = abortOnDisconnect(req, res, controller)
+      try {
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const q = requestUrl.searchParams.get('q')?.trim() ?? ''
+        const pageValue = requestUrl.searchParams.get('page') ?? '1'
+        const limitValue = requestUrl.searchParams.get('limit') ?? '100'
+        const page = Number(pageValue)
+        const limit = Number(limitValue)
+        if (q.length > 160 || !Number.isSafeInteger(page) || page < 1 || page > 1_000
+          || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+          throw new InternalMarketError(400, 'internal-invalid-request', '内部插件目录查询参数无效。')
+        }
+        const key = internalKey(internalCredentialsProvider)
+        const identityResponse = await dsh1024StoreInternalHttpClient.getJson(
+          INTERNAL_AUTH_URL,
+          signal,
+          internalPolicy(key),
+        )
+        const identityBody = recordValue(identityResponse.value)
+        if (identityBody?.ok !== true) throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid authentication response.')
+        const identity = internalIdentity(identityBody.identity)
+        const url = new URL(INTERNAL_PLUGINS_URL)
+        url.searchParams.set('page', String(page))
+        url.searchParams.set('limit', String(limit))
+        if (q.length > 0) url.searchParams.set('q', q)
+        const response = await dsh1024StoreInternalHttpClient.getJson(url.href, signal, internalPolicy(key))
+        const normalized = internalPluginsResponse(response.value)
+        if (!signal.aborted && !res.destroyed) sendJson(res, 200, { ...normalized, identity })
+      } catch (cause) {
+        if (!signal.aborted && !res.destroyed) sendInternalFailure(res, cause)
+      } finally {
+        stopWatching()
+      }
+    }}),
+    ctx.webServer.register({ kind: 'exact', path: ROUTE_INTERNAL_INSTALL_TICKET, handler: async (req, res) => {
+      if (req.method !== 'POST' || !mutationAllowed(req, expectedPort)) {
+        sendJson(res, 405, { error: 'internal install tickets require a local same-origin POST' })
+        return
+      }
+      const controller = new AbortController()
+      const signal = AbortSignal.any([controller.signal, generationController.signal])
+      const stopWatching = abortOnDisconnect(req, res, controller)
+      try {
+        const body = recordValue(await readJson(req, signal))
+        const pluginId = body?.pluginId
+        if (!exactKeys(body ?? {}, ['pluginId']) || !boundedIdentifier(pluginId)) {
+          throw new InternalMarketError(400, 'internal-invalid-request', '内部插件标识无效。')
+        }
+        const key = internalKey(internalCredentialsProvider)
+        const encoded = pluginId.split('/').map(encodeURIComponent).join('/')
+        const response = await dsh1024StoreInternalHttpClient.postJson(
+          `${INTERNAL_API_PREFIX}/v1/internal/plugins/${encoded}/install-ticket`,
+          signal,
+          {},
+          internalPolicy(key),
+        )
+        const payload = recordValue(response.value)
+        const ticket = boundedText(payload?.ticket, 256)
+        const install = boundedText(payload?.install, 500)
+        const returnedPluginId = boundedText(payload?.pluginId, 256)
+        const expiresAt = boundedText(payload?.expiresAt, 64)
+        if (payload?.ok !== true || ticket === undefined || install === undefined
+          || returnedPluginId === undefined || expiresAt === undefined) {
+          throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid install ticket.')
+        }
+        const result: MarketInternalInstallTicketResponse = {
+          ok: true,
+          pluginId: returnedPluginId,
+          install,
+          ticket,
+          expiresAt,
+        }
+        if (!signal.aborted && !res.destroyed) sendJson(res, 200, result)
+      } catch (cause) {
+        if (!signal.aborted && !res.destroyed) sendInternalFailure(res, cause)
+      } finally {
+        stopWatching()
       }
     }}),
     ctx.webServer.register({ kind: 'exact', path: ROUTE_CATALOG, handler: async (req, res) => {
@@ -1203,4 +1503,7 @@ export const marketRoutes = {
   requestRestart: ROUTE_REQUEST_RESTART,
   operationPreview: ROUTE_OPERATION_PREVIEW,
   operationExecute: ROUTE_OPERATION_EXECUTE,
+  internalAuth: ROUTE_INTERNAL_AUTH,
+  internalPlugins: ROUTE_INTERNAL_PLUGINS,
+  internalInstallTicket: ROUTE_INTERNAL_INSTALL_TICKET,
 }

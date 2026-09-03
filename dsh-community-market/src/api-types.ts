@@ -121,6 +121,53 @@ export interface MarketInstallableResponse {
   readonly fetchedAt: string
 }
 
+export interface MarketInternalIdentity {
+  readonly userId: string
+  readonly username: string
+  readonly email: string | null
+  readonly groupId: string
+  readonly groupName: string
+  readonly platform: 'openai'
+  readonly canUpload: boolean
+  readonly canReview: boolean
+}
+
+/** Safe projection of an approved private 1024Store entry. */
+export interface MarketInternalPlugin {
+  readonly id: string
+  readonly name: string
+  readonly repository: string
+  readonly category: string
+  readonly description: Record<'en' | 'zh', string>
+  readonly added: string
+  readonly install?: string
+  readonly updatedAt: string
+  readonly ownerUsername: string
+  readonly reviewStatus: 'approved'
+  readonly sourceCommit: string | null
+  readonly approvedCommit: string | null
+}
+
+export interface MarketInternalPluginsResponse {
+  readonly plugins: readonly MarketInternalPlugin[]
+  readonly page: number
+  readonly limit: number
+  readonly total: number
+  readonly totalPages: number
+  readonly catalogTotal: number
+  readonly categories: readonly { readonly id: string; readonly en: string; readonly zh: string; readonly count: number }[]
+  readonly generatedAt: string
+  readonly identity: MarketInternalIdentity
+}
+
+export interface MarketInternalInstallTicketResponse {
+  readonly ok: true
+  readonly pluginId: string
+  readonly install: string
+  readonly ticket: string
+  readonly expiresAt: string
+}
+
 /** Renderer input for the non-mutating verification stage. */
 export type MarketOperationPreviewRequest =
   | {

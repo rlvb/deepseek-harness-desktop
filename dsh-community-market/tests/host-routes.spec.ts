@@ -19,7 +19,7 @@ import {
 } from '../src/adapters/dshfind.js'
 import type { MarketSettingsDocument } from '../src/catalog/source-store.js'
 import type { CatalogSourceManifest, LocalSourceRecord } from '../src/contracts/index.js'
-import { marketRoutes, registerMarketRoutes } from '../src/host/routes.js'
+import { dsh1024StoreInternalHttpClient, marketRoutes, registerMarketRoutes } from '../src/host/routes.js'
 import { restrictedHttpClient } from '../src/network/restricted-http.js'
 
 type RouteHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
@@ -101,6 +101,7 @@ const standardSource = (overrides: Partial<LocalSourceRecord> = {}): LocalSource
 async function startMarketServer(
   initialSources: readonly LocalSourceRecord[],
   sharedSettings?: SharedMarketSettings,
+  internalKey?: string,
 ): Promise<MarketServer> {
   const routes = new Map<string, RouteHandler>()
   const settings = sharedSettings ?? { document: { sources: initialSources } }
@@ -138,7 +139,14 @@ async function startMarketServer(
     },
     logger: { error: vi.fn() },
   } as unknown as Context
-  const disposeRoutes = registerMarketRoutes(ctx, scope)
+  const disposeRoutes = registerMarketRoutes(
+    ctx,
+    scope,
+    undefined,
+    undefined,
+    undefined,
+    internalKey === undefined ? undefined : { get: () => ({ readOpenAiGroupKey: () => internalKey }) },
+  )
   return {
     baseUrl: `http://127.0.0.1:${String(port)}`,
     close: async () => {
@@ -187,6 +195,94 @@ describe('community market Host routes', () => {
           },
         ],
       })
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('keeps internal directory access separate and forwards only the Host bearer Key', async () => {
+    const missingKeyServer = await startMarketServer([])
+    try {
+      const response = await readRoute(missingKeyServer, marketRoutes.internalPlugins)
+      expect(response.status).toBe(401)
+      await expect(response.json()).resolves.toMatchObject({ code: 'internal-key-required' })
+    } finally {
+      await missingKeyServer.close()
+    }
+
+    const identity = {
+      userId: 'user-1',
+      username: 'tester',
+      email: null,
+      groupId: '8',
+      groupName: '8号仓token工厂-openAI',
+      platform: 'openai',
+      canUpload: true,
+      canReview: false,
+    }
+    const getJson = vi.spyOn(dsh1024StoreInternalHttpClient, 'getJson').mockImplementation(async (url, _signal, policy) => {
+      expect(policy?.requestHeaders?.Authorization).toBe('Bearer sk-openai')
+      if (url.endsWith('/auth/me')) return { value: { ok: true, identity }, finalUrl: url }
+      return {
+        value: {
+          plugins: [{
+            id: 'enterprise/private-plugin',
+            name: 'Private Plugin',
+            repository: 'https://tokenapi.chinabeego.com/gitea/enterprise/private-plugin',
+            category: 'tools',
+            description: { en: 'Private', zh: '内部' },
+            added: '2026-09-03',
+            updatedAt: '2026-09-03T00:00:00Z',
+            ownerUsername: 'maintainer',
+            reviewStatus: 'approved',
+            sourceCommit: null,
+            approvedCommit: 'approved-1',
+          }],
+          page: 1,
+          limit: 100,
+          total: 1,
+          totalPages: 1,
+          catalogTotal: 1,
+          categories: [],
+          generatedAt: '2026-09-03T00:00:00Z',
+          identity,
+        },
+        finalUrl: url,
+      }
+    })
+    const postJson = vi.spyOn(dsh1024StoreInternalHttpClient, 'postJson').mockResolvedValue({
+      value: {
+        ok: true,
+        pluginId: 'enterprise/private-plugin',
+        install: 'dsh plugin --profile web add https://tokenapi.chinabeego.com/gitea/enterprise/private-plugin',
+        ticket: 'ticket-1',
+        expiresAt: '2026-09-03T00:05:00Z',
+      },
+      finalUrl: 'https://tokenapi.chinabeego.com:9443/dsh-market/api/v1/internal/plugins/enterprise/private-plugin/install-ticket',
+    })
+    const server = await startMarketServer([], undefined, 'sk-openai')
+    try {
+      const response = await readRoute(server, `${marketRoutes.internalPlugins}?q=private`)
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toMatchObject({
+        identity,
+        plugins: [{ id: 'enterprise/private-plugin', reviewStatus: 'approved' }],
+      })
+      expect(getJson).toHaveBeenCalledTimes(2)
+
+      const ticketResponse = await fetch(`${server.baseUrl}${marketRoutes.internalInstallTicket}`, {
+        method: 'POST',
+        headers: { ...localHeaders(server), origin: server.baseUrl, 'content-type': 'application/json' },
+        body: JSON.stringify({ pluginId: 'enterprise/private-plugin' }),
+      })
+      expect(ticketResponse.status).toBe(200)
+      await expect(ticketResponse.json()).resolves.toMatchObject({ ticket: 'ticket-1' })
+      expect(postJson).toHaveBeenCalledWith(
+        expect.stringContaining('/internal/plugins/enterprise/private-plugin/install-ticket'),
+        expect.any(AbortSignal),
+        {},
+        expect.objectContaining({ requestHeaders: { Authorization: 'Bearer sk-openai' } }),
+      )
     } finally {
       await server.close()
     }

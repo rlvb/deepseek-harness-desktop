@@ -36,6 +36,16 @@ Renderer 在安装时不会提交 package name 或 package-manager 命令，只�
 
 卸载 preview 只接受 Desktop 清单返回的、当前 generation 有效的不透明 `bundleId`。Host 将它解析为当前直接依赖，确认可以移除后执行 `desktopPnpm.run(['remove', packageName])`。Market 不提供启用或禁用操作。
 
+## 私有内部插件目录
+
+企业版在公共目录之外提供独立的 **内部插件** 视图。它连接私有部署的 DSH 1024Store 内部接口，不把内部条目合并到公共目录、公共分页或公共缓存。用户可以从左侧市场入口进入公共市集，也可以从旁边的“内部插件”快捷入口直接进入内部目录。
+
+内部目录的请求只在 Host 完成：Host 从 `dsh-sub2api` 注入的 `dshSub2ApiCredentials` 能力读取 `BHCTOKENAPI_API_KEY`，先调用 `/api/v1/internal/auth/me` 校验，再调用 `/api/v2/internal/plugins` 获取当前账号可见的已审核条目。GPT/GPTVIP Key 不用于内部目录授权。原始 Key 不会进入 Renderer、URL、localStorage、公共缓存或日志。
+
+内部条目仅展示服务端返回的安全字段，并且必须是 `reviewStatus=approved`。用户点击“获取安装凭证”时，Host 调用内部 install-ticket 接口返回短时、一次性的 ticket 和服务端安装说明；当前版本不会直接执行服务端返回的命令。真正的一键安装需要 1024Store 提供受控包代理或企业代码托管下载服务后，再增加独立 Host 安装适配器。
+
+错误状态含义：`internal-key-required` 是本机未配置 OpenAI 分组 Key，`internal-key-invalid` 是 Key 无效/过期，`internal-permission-denied` 是账号无内部目录权限，`internal-service-unavailable` 是私有 Store 或网络暂时不可用。每次目录读取都会重新校验 `auth/me`，所以账号权限变化无需重启 DSH。
+
 ## 目录来源
 
 任何人都可以发布符合公开 [`catalog-source`](docs/schemas/catalog-source.schema.json) 与 [`catalog-provider-page`](docs/schemas/catalog-provider-page.schema.json) 合同的来源；现有 API 也可以通过经过审查的本地 adapter 接入。远端数据会在 Client 看到前完成标准化，provider 命令永远不会被展示或执行。
