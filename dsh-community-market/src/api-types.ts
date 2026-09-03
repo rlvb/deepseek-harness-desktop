@@ -168,6 +168,12 @@ export interface MarketInternalInstallTicketResponse {
   readonly install: string
   readonly ticket: string
   readonly expiresAt: string
+  /** Present for approved private Gitea plugins that support Host-side install. */
+  readonly artifact?: {
+    readonly kind: 'gitea-tarball'
+    readonly packageName: string
+    readonly version: string
+  }
 }
 
 /** Renderer request for the Host-owned internal plugin install handoff. */

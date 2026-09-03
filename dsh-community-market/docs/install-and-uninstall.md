@@ -51,13 +51,13 @@ This flow applies equally to plugins installed by Community Market, another plug
 
 ## Internal one-click installation
 
-The enterprise **Internal** directory never opens a private Gitea repository and never lets the Renderer execute server-provided command text. **Install with one click** requests and consumes a single-use install ticket with the current OpenAI-group Key, then accepts only this reviewed target shape:
+The enterprise **Internal** directory never opens a private Gitea repository and never lets the Renderer execute server-provided command text. **Install with one click** requests and consumes a single-use install ticket with the current OpenAI-group Key, then accepts either a standard npm target or a commit-bound private archive.
 
 ```text
 dsh plugin --profile <profile> add <npm-package>
 ```
 
-The package must resolve from DSH’s npm registry and pass the DSH bundle check. It then follows the same confirmation, exact-version installation, Profile update, and restart flow as a public plugin. Gitea/GitHub URLs and custom commands are rejected with an administrator configuration message instead of being executed.
+The package must resolve from DSH’s npm registry and pass the DSH bundle check. A private Gitea target is eligible only when the approved commit’s repository root contains a valid `package.json`, an exact stable three-part version, and a valid `dsh.bundle.patch`; 1024Store exposes it as `artifact.kind=gitea-tarball`. The Host downloads the archive from the compiled-in HTTPS market origin, stages it under the active Profile’s `.dsh-internal-artifacts` directory, and runs `pnpm add --save-exact` only after confirmation. Both target types then follow the same exact-version Profile update and restart flow. Gitea/GitHub URLs and custom commands are rejected with an administrator configuration message instead of being executed.
 
 ## Manual fallback
 

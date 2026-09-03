@@ -260,6 +260,36 @@ describe('simplified Profile package operations', () => {
     expect(verify).toHaveBeenCalledOnce()
   })
 
+  it('installs an approved internal archive from a persistent Profile-local staging path', async () => {
+    const profileDir = await createProfile()
+    const archivePath = join(profileDir, 'internal-source.tgz')
+    await writeFile(archivePath, Buffer.from('fixture archive'))
+    const calls: string[][] = []
+    const service = new MarketInstallService(
+      () => ({ name: 'web', dir: profileDir }),
+      runner(profileDir, calls),
+      { verify: vi.fn() },
+    )
+
+    const preview = await service.previewLocalArchive(
+      packageName,
+      version,
+      archivePath,
+      'Internal archive plugin',
+      new AbortController().signal,
+    )
+    await expect(service.executePreview(preview.intent, new AbortController().signal)).resolves.toMatchObject({
+      action: 'install',
+      packageName,
+      version,
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.slice(0, 2)).toEqual(['add', '--save-exact'])
+    expect(calls[0]?.[2]).toMatch(/^file:\/\/\/.*\.dsh-internal-artifacts\/dsh-plugin-safe-1\.2\.3\.tgz$/u)
+    await expect(readFile(join(profileDir, '.dsh-internal-artifacts', 'dsh-plugin-safe-1.2.3.tgz'))).resolves.toEqual(Buffer.from('fixture archive'))
+    await expect(readFile(archivePath)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('returns bounded pnpm output and writes the same failure to the Desktop log', async () => {
     const profileDir = await createProfile()
     const logFailure = vi.fn()

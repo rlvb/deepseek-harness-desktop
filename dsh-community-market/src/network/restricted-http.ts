@@ -58,6 +58,12 @@ interface RestrictedHttpResponse {
   readonly body: Buffer
 }
 
+export interface RestrictedHttpBytesResponse {
+  readonly body: Uint8Array
+  readonly finalUrl: string
+  readonly contentType: string
+}
+
 export interface RestrictedHttpClientOptions {
   /**
    * Exact, reviewed hostnames that may resolve through a local proxy's
@@ -87,6 +93,7 @@ export interface RestrictedHttpClientOptions {
 
 export interface RestrictedHttpClient extends CatalogHttpClient {
   postJson(url: string, signal: AbortSignal, body: unknown, policy?: CatalogHttpRequestPolicy): Promise<CatalogHttpResponse>
+  getBytes(url: string, signal: AbortSignal, policy?: CatalogHttpRequestPolicy): Promise<RestrictedHttpBytesResponse>
 }
 
 const syntheticProxyAddresses = new BlockList()
@@ -284,6 +291,54 @@ async function fetchJson(
   return { value, finalUrl: url.href }
 }
 
+async function fetchBytes(
+  start: string,
+  signal: AbortSignal,
+  resolveAddress: (hostname: string) => Promise<PinnedAddress>,
+  request: (
+    url: URL,
+    signal: AbortSignal,
+    pinned: PinnedAddress,
+    options?: RestrictedRequestOptions,
+  ) => Promise<RestrictedHttpResponse>,
+  allowedHttpsOrigins: ReadonlySet<string>,
+  allowedOrigin: string | undefined,
+  requestOptions: RestrictedRequestOptions,
+  redirectCount = 0,
+): Promise<RestrictedHttpBytesResponse> {
+  if (signal.aborted) throw new CatalogNetworkError('timeout')
+  const url = validateUrl(start, allowedHttpsOrigins)
+  if (allowedOrigin !== undefined && url.origin !== allowedOrigin) throw new CatalogNetworkError('redirect')
+  if (redirectCount > MAX_REDIRECTS) throw new CatalogNetworkError('redirect')
+  const pinned = await resolveAddress(url.hostname)
+  if (signal.aborted) throw new CatalogNetworkError('timeout')
+  const response = await request(url, signal, pinned, requestOptions)
+  const status = response.statusCode
+  if (status >= 300 && status < 400) {
+    const location = response.headers.location
+    if (location === undefined) throw new CatalogNetworkError('redirect')
+    return await fetchBytes(
+      new URL(location, url).href,
+      signal,
+      resolveAddress,
+      request,
+      allowedHttpsOrigins,
+      allowedOrigin,
+      requestOptions,
+      redirectCount + 1,
+    )
+  }
+  if (status < 200 || status >= 300) throw new CatalogNetworkError('http', status)
+  const encoding = response.headers['content-encoding']
+  if (encoding !== undefined && encoding !== 'identity') throw new CatalogNetworkError('response')
+  const contentType = response.headers['content-type']
+  return {
+    body: response.body,
+    finalUrl: url.href,
+    contentType: Array.isArray(contentType) ? contentType[0] ?? '' : contentType ?? '',
+  }
+}
+
 export function createRestrictedHttpClient(
   options: RestrictedHttpClientOptions = {},
 ): RestrictedHttpClient {
@@ -359,12 +414,63 @@ export function createRestrictedHttpClient(
     }
   }
 
+  const requestBytes = async (
+    start: string,
+    signal: AbortSignal,
+    policy: CatalogHttpRequestPolicy,
+    requestOptions: Omit<RestrictedRequestOptions, 'headers'> & { readonly body?: string },
+  ): Promise<RestrictedHttpBytesResponse> => {
+    if (signal.aborted) throw new CatalogNetworkError('timeout')
+    const totalController = new AbortController()
+    let rejectAbort!: (cause: unknown) => void
+    const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject })
+    const onAbort = () => {
+      const cause = signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+      totalController.abort(cause)
+      rejectAbort(cause)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    let totalTimer!: NodeJS.Timeout
+    const timedOut = new Promise<never>((_resolve, reject) => {
+      totalTimer = setTimeout(() => {
+        const cause = new CatalogNetworkError('timeout')
+        totalController.abort(cause)
+        reject(cause)
+      }, totalTimeoutMs)
+    })
+    const headers: Readonly<Record<string, string>> = {
+      accept: 'application/gzip, application/octet-stream',
+      'accept-encoding': 'identity',
+      'user-agent': 'dsh-community-market/0.1',
+      ...(requestOptions.method === 'POST' ? { 'content-type': 'application/json' } : {}),
+      ...(policy.requestHeaders ?? {}),
+    }
+    const operation = fetchBytes(
+      start,
+      totalController.signal,
+      resolveAddress,
+      request,
+      allowedHttpsOrigins,
+      policy.allowedOrigin,
+      { ...requestOptions, headers },
+    )
+    try {
+      return await Promise.race([operation, aborted, timedOut])
+    } finally {
+      clearTimeout(totalTimer)
+      signal.removeEventListener('abort', onAbort)
+    }
+  }
+
   return {
     async getJson(start, signal, policy: CatalogHttpRequestPolicy = {}) {
       return await requestJson(start, signal, policy, { method: 'GET' })
     },
     async postJson(start: string, signal: AbortSignal, body: unknown, policy: CatalogHttpRequestPolicy = {}) {
       return await requestJson(start, signal, policy, { method: 'POST', body: JSON.stringify(body) })
+    },
+    async getBytes(start: string, signal: AbortSignal, policy: CatalogHttpRequestPolicy = {}) {
+      return await requestBytes(start, signal, policy, { method: 'GET' })
     },
   }
 }

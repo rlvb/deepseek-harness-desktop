@@ -51,13 +51,13 @@ Market 安装不会创建 receipt、checkpoint、重试、清理或回滚 operat
 
 ## 内部插件一键安装
 
-企业版的“内部插件”目录不会打开私有 Gitea 仓库，也不会让 Renderer 执行服务端返回的命令。点击“一键安装”时，Host 会使用当前 OpenAI 分组 Key 申请并消费一次性 install ticket，然后仅接受以下格式的审核安装目标：
+企业版的“内部插件”目录不会打开私有 Gitea 仓库，也不会让 Renderer 执行服务端返回的命令。点击“一键安装”时，Host 会使用当前 OpenAI 分组 Key 申请并消费一次性 install ticket，然后按标准 npm 或审核归档两种目标处理：
 
 ```text
 dsh plugin --profile <profile> add <npm-package>
 ```
 
-目标包必须能从 DSH 使用的 npm registry 解析，并通过 DSH bundle 校验；之后进入和公共插件相同的确认、精确版本安装、Profile 更新和重启流程。若内部目录记录的是 Gitea/GitHub 地址或自定义命令，DSH 会拒绝自动执行并提示管理员重新发布标准 npm 安装目标。
+目标包必须能从 DSH 使用的 npm registry 解析，并通过 DSH bundle 校验；或者，内部 Gitea 仓库的审核 commit 根目录必须包含合法 `package.json`、稳定三段式版本和有效 `dsh.bundle.patch`。后者由 1024Store 通过固定接口代理为 `gitea-tarball`，Host 下载到临时文件，用户确认后复制到 Profile 的 `.dsh-internal-artifacts` 目录，再用精确版本安装。两种方式之后都进入相同的确认、Profile 更新和重启流程。若条目不满足任一条件，DSH 会拒绝自动执行并提示管理员配置标准 npm 或审核归档目标。
 
 ## 手动兜底
 

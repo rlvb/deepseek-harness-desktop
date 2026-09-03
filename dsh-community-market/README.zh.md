@@ -42,9 +42,14 @@ Renderer 在安装时不会提交 package name 或 package-manager 命令，只�
 
 内部目录的请求只在 Host 完成：Host 从 `dsh-sub2api` 注入的 `dshSub2ApiCredentials` 能力读取 `BHCTOKENAPI_API_KEY`，先调用 `/api/v1/internal/auth/me` 校验，再调用 `/api/v2/internal/plugins` 获取当前账号可见的已审核条目。GPT/GPTVIP Key 不用于内部目录授权。原始 Key 不会进入 Renderer、URL、localStorage、公共缓存或日志。
 
-内部条目仅展示服务端返回的安全字段，并且必须是 `reviewStatus=approved`。用户可以先打开“项目介绍”查看审核描述；内部私有仓库不会直接在 DSH 中打开。用户点击“一键安装”后，Host 申请并消费短时、一次性的 install ticket，只接受严格的 `dsh plugin --profile <profile> add <npm-package>` 安装目标，再复用 DSH 的 npm 验证、安装确认、Profile 更新和重启流程。服务端命令不会被当作 Shell 命令执行。
+内部条目仅展示服务端返回的安全字段，并且必须是 `reviewStatus=approved`。用户可以先打开“项目介绍”查看审核描述；内部私有仓库不会直接在 DSH 中打开。用户点击“一键安装”后，Host 申请并消费短时、一次性的 install ticket：公开/npm 条目仍复用 DSH 的 npm 验证、安装确认、Profile 更新和重启流程；私有 Gitea 条目则由 1024Store 按审核通过的 commit 代理归档，Host 下载到临时文件后再进入相同的用户确认、Profile 更新和重启流程。服务端命令不会被当作 Shell 命令执行。
 
-为了让内部插件出现在“一键安装”流程中，1024Store 审核记录的 `install` 字段必须使用上述标准 npm 命令格式，并且目标包需要发布到 DSH 使用的 npm registry、包含有效的 DSH bundle 声明。旧的 Gitea URL、GitHub URL 或任意自定义命令不会被自动执行，会在 DSH 中提示管理员重新发布标准安装目标。
+内部插件支持两种安全安装目标：
+
+- 标准 npm：`install` 字段必须是 `dsh plugin --profile <profile> add <npm-package>`，目标包从 DSH 使用的 npm registry 解析，并通过 DSH bundle 校验。
+- 私有 Gitea 归档：仓库必须已审核，审核 commit 的根目录必须包含合法 `package.json`、稳定三段式版本和有效的 `dsh.bundle.patch`。1024Store 返回 `artifact.kind=gitea-tarball`，DSH 只从固定的 HTTPS 市场接口取归档，不把 Gitea 地址、账号密码或管理员 Token 交给 Renderer。
+
+Gitea 归档会先落到 Host 临时文件，确认安装后复制到当前 Profile 的 `.dsh-internal-artifacts` 目录，再用 `pnpm add --save-exact` 安装，保证 Profile 中保存的本地文件引用不会因临时文件清理而失效。预览过期、取消或安装失败时，临时文件自动清理。旧的 Gitea URL、GitHub URL 或任意自定义命令不会被直接执行；不满足归档条件的条目会继续显示管理员配置提示。
 
 错误状态含义：`internal-key-required` 是本机未配置 OpenAI 分组 Key，`internal-key-invalid` 是 Key 无效/过期，`internal-permission-denied` 是账号无内部目录权限，`internal-service-unavailable` 是私有 Store 或网络暂时不可用。每次目录读取都会重新校验 `auth/me`，所以账号权限变化无需重启 DSH。
 

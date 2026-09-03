@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto'
-import { lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 import type { Readable } from 'node:stream'
+import { pathToFileURL } from 'node:url'
 import { prerelease, valid } from 'semver'
 import type {
   MarketCatalogMetadata,
@@ -31,6 +32,7 @@ const MAX_INTENTS = 256
 const MAX_CANDIDATES = 10_000
 const MAX_PNPM_STREAM_OUTPUT_BYTES = 32 * 1024
 const MAX_FAILURE_CAUSE_LENGTH = 4 * 1024
+const MAX_INTERNAL_ARCHIVE_BYTES = 32 * 1024 * 1024
 const BLOCKED_PRODUCT_PACKAGES = new Set(['dsh-plugin-desktop', 'dsh-community-market'])
 const PROFILE_PATTERN = /^[A-Za-z0-9_-]+$/u
 const COMMAND_TOKEN_PATTERN = /^[A-Za-z0-9@:/._#+=-]+$/u
@@ -180,6 +182,8 @@ interface InstallCandidate {
   readonly displayName: string
   readonly packageName?: string
   readonly source?: NormalizedGitHubInstallSource
+  /** Host-downloaded archive for an approved private-market plugin. */
+  readonly localArchivePath?: string
   readonly savedAt: number
 }
 
@@ -559,9 +563,9 @@ export class MarketInstallService {
   }
 
   invalidateSource(sourceRecordId: string): void {
-    for (const [key, candidate] of this.candidates) {
+    for (const candidate of this.candidates.values()) {
       if (candidate.sourceRecordId === sourceRecordId) {
-        this.candidates.delete(key)
+        this.forgetCandidate(candidate)
       }
     }
     for (const [token, intent] of this.intents) {
@@ -708,44 +712,129 @@ export class MarketInstallService {
     }
   }
 
+  /**
+   * Preview an archive downloaded by the trusted Host from the private market.
+   * The market has already bound the archive to an approved Gitea commit and
+   * validated its package manifest; the archive itself never crosses into the
+   * Renderer and is installed only from a Host-owned temporary file.
+   */
+  async previewLocalArchive(
+    packageName: string,
+    version: string,
+    archivePath: string,
+    displayName: string,
+    signal: AbortSignal,
+  ): Promise<MarketInstallPreview> {
+    const operationSignal = this.operationSignal(signal)
+    operationSignal.throwIfAborted()
+    this.purge()
+    if (!safePackageName(packageName) || !marketManagedPackage(packageName) || !stableExactVersion(version)) {
+      throw new MarketInstallError('verification-failed', 'The internal plugin archive identity is invalid.')
+    }
+    if (!isAbsolute(archivePath) || archivePath.includes('\0')) {
+      throw new MarketInstallError('verification-failed', 'The internal plugin archive path is invalid.')
+    }
+    try {
+      const item = await lstat(archivePath)
+      if (!item.isFile() || item.isSymbolicLink() || item.size > MAX_INTERNAL_ARCHIVE_BYTES) throw new Error('unsafe archive')
+    } catch {
+      throw new MarketInstallError('verification-failed', 'The internal plugin archive is unavailable.')
+    }
+    const profile = this.profile()
+    await assertNotInstalled(profile, packageName)
+    const candidate: InstallCandidate = Object.freeze({
+      key: candidateKey('internal-archive', `${packageName}:${opaqueToken()}`),
+      sourceRecordId: 'internal-archive',
+      providerId: 'dsh-1024store-internal',
+      itemId: packageName,
+      displayName: displayName.trim().length > 0 ? displayName.trim() : packageName,
+      packageName,
+      localArchivePath: archivePath,
+      savedAt: this.now(),
+    })
+    this.candidates.set(candidate.key, candidate)
+    this.trim(this.candidates, this.maxCandidates)
+    try {
+      this.assertOpen()
+      const token = this.issueIntent({
+        kind: 'install',
+        candidate,
+        verification: { packageName, version },
+        profile,
+        expiresAt: this.now() + this.intentTtlMs,
+      })
+      return {
+        intent: token,
+        action: 'install',
+        profileName: profile.name,
+        packageName,
+        version,
+        displayName: candidate.displayName,
+        expiresAt: new Date(this.now() + this.intentTtlMs).toISOString(),
+      }
+    } catch (cause) {
+      this.forgetCandidate(candidate)
+      throw cause
+    }
+  }
+
   async executeInstall(token: string, signal: AbortSignal): Promise<MarketInstallResult> {
     return await this.runExclusive(async () => {
       const operationSignal = this.operationSignal(signal)
       const intent = this.consumeIntent(token, 'install')
-      const profile = this.sameProfile(intent.profile)
       const candidate = intent.candidate
-      if (this.candidates.get(candidate.key) !== candidate) {
-        throw new MarketInstallError('not-available', 'The verified catalog item is no longer available.')
-      }
-      const verification = intent.verification
-      const packageName = verification.packageName ?? candidate.packageName
-      if (packageName === undefined || !safePackageName(packageName)) {
-        throw new MarketInstallError('verification-failed', 'The verified package name is invalid.')
-      }
-      await assertNotInstalled(profile, packageName)
-      if (this.candidates.get(candidate.key) !== candidate) {
-        throw new MarketInstallError('not-available', 'The catalog source changed before installation.')
-      }
-      const target = candidate.source === undefined
-        ? `${packageName}@${verification.version}`
-        : githubPackageTarget(candidate.source)
-      await this.runPnpm([
-        'add',
-        ...(candidate.source === undefined ? this.installOptions(packageName) : ['--save-exact']),
-        target,
-      ], operationSignal)
+      let stagedArchivePath: string | undefined
+      let packageManagerCompleted = false
       try {
-        await setProfileBundle(profile, packageName, true)
-        const installedVersion = await directProfilePluginVersion(profile, packageName)
-        if (installedVersion !== verification.version) throw new Error('installed version mismatch')
-        operationSignal.throwIfAborted()
-      } catch {
-        throw new MarketInstallError(
-          'operation-failed',
-          'The package manager changed the Profile, but the plugin bundle could not be validated. Use a Recovery checkpoint if you need to restore the previous Profile state.',
-        )
+        const profile = this.sameProfile(intent.profile)
+        if (this.candidates.get(candidate.key) !== candidate) {
+          throw new MarketInstallError('not-available', 'The verified catalog item is no longer available.')
+        }
+        const verification = intent.verification
+        const packageName = verification.packageName ?? candidate.packageName
+        if (packageName === undefined || !safePackageName(packageName)) {
+          throw new MarketInstallError('verification-failed', 'The verified package name is invalid.')
+        }
+        await assertNotInstalled(profile, packageName)
+        if (this.candidates.get(candidate.key) !== candidate) {
+          throw new MarketInstallError('not-available', 'The catalog source changed before installation.')
+        }
+        const target = candidate.localArchivePath !== undefined
+          ? pathToFileURL(stagedArchivePath = await this.stageLocalArchive(
+            profile,
+            packageName,
+            verification.version,
+            candidate.localArchivePath,
+          )).href
+          : candidate.source === undefined
+            ? `${packageName}@${verification.version}`
+            : githubPackageTarget(candidate.source)
+        await this.runPnpm([
+          'add',
+          ...(candidate.localArchivePath !== undefined
+            ? ['--save-exact']
+            : candidate.source === undefined ? this.installOptions(packageName) : ['--save-exact']),
+          target,
+        ], operationSignal)
+        packageManagerCompleted = true
+        try {
+          await setProfileBundle(profile, packageName, true)
+          const installedVersion = await directProfilePluginVersion(profile, packageName)
+          if (installedVersion !== verification.version) throw new Error('installed version mismatch')
+          operationSignal.throwIfAborted()
+        } catch {
+          throw new MarketInstallError(
+            'operation-failed',
+            'The package manager changed the Profile, but the plugin bundle could not be validated. Use a Recovery checkpoint if you need to restore the previous Profile state.',
+          )
+        }
+        return { packageName, version: verification.version }
+      } finally {
+        this.forgetCandidate(candidate)
+        if (stagedArchivePath !== undefined && !packageManagerCompleted) {
+          await unlink(stagedArchivePath).catch(() => {})
+        }
       }
-      return { packageName, version: verification.version }
     })
   }
 
@@ -827,7 +916,7 @@ export class MarketInstallService {
     if (this.closed) return
     this.closed = true
     this.generation.abort(new DOMException('Market install service was disposed', 'AbortError'))
-    this.candidates.clear()
+    for (const candidate of this.candidates.values()) this.forgetCandidate(candidate)
     this.intents.clear()
     this.restartIntents.clear()
   }
@@ -883,9 +972,9 @@ export class MarketInstallService {
 
   private purge(): void {
     const now = this.now()
-    for (const [key, candidate] of this.candidates) {
+    for (const candidate of this.candidates.values()) {
       if (now - candidate.savedAt >= this.candidateTtlMs) {
-        this.candidates.delete(key)
+        this.forgetCandidate(candidate)
       }
     }
     for (const [token, intent] of this.intents) {
@@ -900,8 +989,33 @@ export class MarketInstallService {
     while (map.size > limit) {
       const oldest = map.keys().next().value as string | undefined
       if (oldest === undefined) return
+      const removed = map.get(oldest)
       map.delete(oldest)
+      if (map === this.candidates && removed !== undefined) this.forgetCandidate(removed as InstallCandidate)
     }
+  }
+
+  private forgetCandidate(candidate: InstallCandidate): void {
+    this.candidates.delete(candidate.key)
+    if (candidate.localArchivePath !== undefined) {
+      void unlink(candidate.localArchivePath).catch(() => {})
+    }
+  }
+
+  private async stageLocalArchive(
+    profile: MarketDesktopProfile,
+    packageName: string,
+    version: string,
+    sourcePath: string,
+  ): Promise<string> {
+    const directory = join(profile.dir, '.dsh-internal-artifacts')
+    await mkdir(directory, { recursive: true, mode: 0o700 })
+    const safeName = packageName.replace(/[^A-Za-z0-9._-]+/gu, '-')
+    const target = join(directory, `${safeName}-${version}.tgz`)
+    const body = await readFile(sourcePath)
+    if (body.byteLength > MAX_INTERNAL_ARCHIVE_BYTES) throw new Error('internal archive too large')
+    await writeFile(target, body, { flag: 'w', mode: 0o600 })
+    return target
   }
 
   private async runExclusive<T>(task: () => Promise<T>): Promise<T> {

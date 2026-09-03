@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { unlink } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { Context } from '@deepseek-ai/cordis'
@@ -21,6 +22,7 @@ import type { MarketSettingsDocument } from '../src/catalog/source-store.js'
 import type { CatalogSourceManifest, LocalSourceRecord } from '../src/contracts/index.js'
 import {
   dsh1024StoreInternalHttpClient,
+  dsh1024StoreInternalArtifactHttpClient,
   marketRoutes,
   registerMarketRoutes,
   type MarketInstallServiceProvider,
@@ -356,6 +358,68 @@ describe('community market Host routes', () => {
         packageName: 'dsh-plugin-internal',
       })
       expect(previewPackage).toHaveBeenCalledWith('dsh-plugin-internal', 'Private Plugin', expect.any(AbortSignal))
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('downloads an approved private artifact through the Host-only market client', async () => {
+    const getJson = vi.spyOn(dsh1024StoreInternalHttpClient, 'getJson').mockImplementation(async (url, _signal, policy) => {
+      expect(policy?.requestHeaders?.Authorization).toBe('Bearer sk-openai')
+      expect(url).toContain('/internal/install/ticket-archive')
+      return {
+        value: {
+          ok: true,
+          pluginId: 'enterprise/private-plugin',
+          repository: 'https://tokenapi.chinabeego.com/gitea/enterprise/private-plugin',
+          commit: 'approved-1',
+          install: 'dsh plugin --profile web add https://tokenapi.chinabeego.com/gitea/enterprise/private-plugin',
+          artifact: { kind: 'gitea-tarball', packageName: 'dsh-plugin-internal', version: '1.2.3' },
+        },
+        finalUrl: url,
+      }
+    })
+    const getBytes = vi.spyOn(dsh1024StoreInternalArtifactHttpClient, 'getBytes').mockImplementation(async (url, _signal, policy) => {
+      expect(policy?.requestHeaders?.Authorization).toBe('Bearer sk-openai')
+      expect(url).toContain('/internal/plugins/enterprise/private-plugin/artifact')
+      return { body: new Uint8Array([31, 139, 8, 0]), finalUrl: url, contentType: 'application/gzip' }
+    })
+    const previewLocalArchive = vi.fn(async (_packageName: string, _version: string, archivePath: string) => {
+      await unlink(archivePath)
+      return {
+        intent: 'preview-archive-1',
+        action: 'install' as const,
+        profileName: 'web',
+        packageName: 'dsh-plugin-internal',
+        version: '1.2.3',
+        displayName: 'Private Plugin',
+        expiresAt: '2026-09-03T00:05:00Z',
+      }
+    })
+    const server = await startMarketServer([], undefined, 'sk-openai', {
+      get: () => ({ previewLocalArchive } as unknown as MarketInstallService),
+    })
+    try {
+      const response = await fetch(`${server.baseUrl}${marketRoutes.internalInstallPreview}`, {
+        method: 'POST',
+        headers: { ...localHeaders(server), origin: server.baseUrl, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          pluginId: 'enterprise/private-plugin',
+          ticket: 'ticket-archive',
+          displayName: 'Private Plugin',
+        }),
+      })
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toMatchObject({ previewId: 'preview-archive-1' })
+      expect(getJson).toHaveBeenCalledOnce()
+      expect(getBytes).toHaveBeenCalledOnce()
+      expect(previewLocalArchive).toHaveBeenCalledWith(
+        'dsh-plugin-internal',
+        '1.2.3',
+        expect.stringMatching(/dsh-market-internal-.*\.tgz$/u),
+        'Private Plugin',
+        expect.any(AbortSignal),
+      )
     } finally {
       await server.close()
     }

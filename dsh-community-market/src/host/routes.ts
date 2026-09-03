@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto'
+import { unlink, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { BlockList, isIP } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings'
@@ -117,6 +120,12 @@ export const dsh1024StoreInternalHttpClient = createRestrictedHttpClient({
   syntheticProxyHostnames: [DSH_1024STORE_HOSTNAME],
   allowedHttpsOrigins: [DSH_1024STORE_ORIGIN],
   maxBodyBytes: MAX_DSH_1024STORE_BODY_BYTES,
+})
+
+export const dsh1024StoreInternalArtifactHttpClient = createRestrictedHttpClient({
+  syntheticProxyHostnames: [DSH_1024STORE_HOSTNAME],
+  allowedHttpsOrigins: [DSH_1024STORE_ORIGIN],
+  maxBodyBytes: 32 * 1024 * 1024,
 })
 
 const INTERNAL_API_PREFIX = `${DSH_1024STORE_ORIGIN}/dsh-market/api`
@@ -240,6 +249,32 @@ function internalPlugin(value: unknown): MarketInternalPlugin | undefined {
     reviewStatus: 'approved',
     sourceCommit: typeof source.sourceCommit === 'string' || source.sourceCommit === null ? source.sourceCommit : null,
     approvedCommit: typeof source.approvedCommit === 'string' || source.approvedCommit === null ? source.approvedCommit : null,
+  }
+}
+
+const INTERNAL_PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u
+const INTERNAL_STABLE_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u
+
+function internalInstallArtifact(value: unknown): NonNullable<MarketInternalInstallTicketResponse['artifact']> | undefined {
+  const source = recordValue(value)
+  const kind = source?.kind
+  const packageName = boundedText(source?.packageName, 256)
+  const version = boundedText(source?.version, 64)
+  if (kind !== 'gitea-tarball' || packageName === undefined || !INTERNAL_PACKAGE_NAME_PATTERN.test(packageName)
+    || version === undefined || !INTERNAL_STABLE_VERSION_PATTERN.test(version)) return undefined
+  return { kind, packageName, version }
+}
+
+async function writeInternalArtifact(bytes: Uint8Array, signal: AbortSignal): Promise<string> {
+  signal.throwIfAborted()
+  const filePath = join(tmpdir(), `dsh-market-internal-${randomUUID()}.tgz`)
+  try {
+    await writeFile(filePath, bytes, { flag: 'wx', mode: 0o600 })
+    signal.throwIfAborted()
+    return filePath
+  } catch (cause) {
+    await unlink(filePath).catch(() => {})
+    throw cause
   }
 }
 
@@ -1065,16 +1100,18 @@ export function registerMarketRoutes(
         const install = boundedText(payload?.install, 500)
         const returnedPluginId = boundedText(payload?.pluginId, 256)
         const expiresAt = boundedText(payload?.expiresAt, 64)
-        if (payload?.ok !== true || ticket === undefined || install === undefined
+        const artifact = internalInstallArtifact(payload?.artifact)
+        if (payload?.ok !== true || ticket === undefined || (install === undefined && artifact === undefined)
           || returnedPluginId === undefined || expiresAt === undefined) {
           throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid install ticket.')
         }
         const result: MarketInternalInstallTicketResponse = {
           ok: true,
           pluginId: returnedPluginId,
-          install,
+          install: install ?? '',
           ticket,
           expiresAt,
+          ...(artifact === undefined ? {} : { artifact }),
         }
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, result)
       } catch (cause) {
@@ -1102,22 +1139,48 @@ export function registerMarketRoutes(
         const payload = recordValue(response.value)
         const returnedPluginId = boundedText(payload?.pluginId, 256)
         const install = boundedText(payload?.install, 500)
-        if (payload?.ok !== true || returnedPluginId !== request.pluginId || install === undefined) {
+        const artifact = internalInstallArtifact(payload?.artifact)
+        if (payload?.ok !== true || returnedPluginId !== request.pluginId || (install === undefined && artifact === undefined)) {
           throw new InternalMarketError(502, 'internal-invalid-response', '私有 1024Store 返回了无法识别的安装授权。')
-        }
-        const packageName = reviewedNpmPackageName(install)
-        if (packageName === undefined) {
-          throw new InternalMarketError(
-            422,
-            'internal-install-unsupported',
-            '该内部插件尚未配置标准 npm 安装目标，请联系管理员发布可一键安装版本。',
-          )
         }
         const installService = installProvider?.get()
         if (installService === undefined) {
           throw new InternalMarketError(503, 'internal-service-unavailable', '当前环境暂不支持内部插件一键安装。')
         }
-        const preview = await installService.previewPackage(packageName, request.displayName, signal)
+        let archivePath: string | undefined
+        let preview
+        try {
+          if (artifact !== undefined) {
+            const encoded = request.pluginId.split('/').map(encodeURIComponent).join('/')
+            const artifactResponse = await dsh1024StoreInternalArtifactHttpClient.getBytes(
+              `${INTERNAL_API_PREFIX}/v1/internal/plugins/${encoded}/artifact`,
+              signal,
+              internalPolicy(key),
+            )
+            archivePath = await writeInternalArtifact(artifactResponse.body, signal)
+            preview = await installService.previewLocalArchive(
+              artifact.packageName,
+              artifact.version,
+              archivePath,
+              request.displayName,
+              signal,
+            )
+            // The install service owns the temporary archive until execute or expiry.
+            archivePath = undefined
+          } else {
+            const packageName = reviewedNpmPackageName(install)
+            if (packageName === undefined) {
+              throw new InternalMarketError(
+                422,
+                'internal-install-unsupported',
+                '该内部插件尚未配置标准 npm 安装目标，请联系管理员发布可一键安装版本。',
+              )
+            }
+            preview = await installService.previewPackage(packageName, request.displayName, signal)
+          }
+        } finally {
+          if (archivePath !== undefined) await unlink(archivePath).catch(() => {})
+        }
         const { intent, ...summary } = preview
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, { ...summary, previewId: intent })
       } catch (cause) {
