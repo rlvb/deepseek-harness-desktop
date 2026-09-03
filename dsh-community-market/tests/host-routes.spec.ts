@@ -30,7 +30,7 @@ import {
   type MarketInstallServiceProvider,
 } from '../src/host/routes.js'
 import type { MarketInstallService } from '../src/install/service.js'
-import { restrictedHttpClient } from '../src/network/restricted-http.js'
+import { CatalogNetworkError, restrictedHttpClient } from '../src/network/restricted-http.js'
 
 type RouteHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
 
@@ -342,7 +342,9 @@ describe('community market Host routes', () => {
         identity,
         plugins: [{ id: 'enterprise/private-plugin', reviewStatus: 'approved' }],
       })
-      expect(getJson).toHaveBeenCalledTimes(2)
+      // The v2 directory already returns the authenticated identity, so the
+      // Host must not add a second auth round-trip before every page load.
+      expect(getJson).toHaveBeenCalledTimes(1)
 
       const projectResponse = await fetch(`${server.baseUrl}${marketRoutes.internalProject}`, {
         method: 'POST',
@@ -354,7 +356,7 @@ describe('community market Host routes', () => {
         id: 'enterprise/private-plugin',
         readme: '# Private Plugin\n\nInternal README',
       })
-      expect(getJson).toHaveBeenCalledTimes(3)
+      expect(getJson).toHaveBeenCalledTimes(2)
 
       const ticketResponse = await fetch(`${server.baseUrl}${marketRoutes.internalInstallTicket}`, {
         method: 'POST',
@@ -385,6 +387,43 @@ describe('community market Host routes', () => {
         packageName: 'dsh-plugin-internal',
       })
       expect(previewPackage).toHaveBeenCalledWith('dsh-plugin-internal', 'Private Plugin', expect.any(AbortSignal))
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('retries one transient private directory 5xx without repeating auth calls', async () => {
+    const identity = {
+      userId: 'user-1',
+      username: 'tester',
+      email: null,
+      groupId: '8',
+      groupName: '8号仓token工厂-openAI',
+      platform: 'openai',
+      canUpload: true,
+      canReview: false,
+    }
+    const directory = {
+      plugins: [],
+      page: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+      catalogTotal: 0,
+      categories: [],
+      generatedAt: '2026-09-04T00:00:00Z',
+      identity,
+    }
+    const getJson = vi.spyOn(dsh1024StoreInternalHttpClient, 'getJson')
+      .mockRejectedValueOnce(new CatalogNetworkError('http', 503))
+      .mockResolvedValueOnce({ value: directory, finalUrl: 'https://tokenapi.chinabeego.com:9443/dsh-market/api/v2/internal/plugins' })
+    const server = await startMarketServer([], undefined, 'sk-openai')
+    try {
+      const response = await readRoute(server, marketRoutes.internalPlugins)
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toMatchObject({ plugins: [], identity })
+      expect(getJson).toHaveBeenCalledTimes(2)
+      expect(getJson.mock.calls.every(([url]) => url.includes('/v2/internal/plugins'))).toBe(true)
     } finally {
       await server.close()
     }

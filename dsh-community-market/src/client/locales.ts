@@ -160,6 +160,11 @@ export const zh = {
   internalKeyInvalid: '当前 OpenAI 分组 Key 无效或已失效，请刷新“8号仓 Token 工厂”。',
   internalPermissionDenied: '当前账号没有访问内部插件目录的权限。',
   internalInvalidResponse: '私有 1024Store 返回了无法识别的内部目录数据。',
+  internalAlreadyInstalled: '该插件已安装在当前配置中，无需重复安装。',
+  internalConflict: '当前配置正由另一项插件操作处理，请稍后重试。',
+  internalTimeout: '连接私有 DSH 1024Store 超时，请重试。',
+  internalNetworkBlocked: '本机 DNS 或代理阻止了私有 DSH 1024Store 连接。',
+  internalUpstreamError: '私有 DSH 1024Store 服务端返回错误，请稍后重试。',
   internalUnavailable: '私有 DSH 1024Store 暂时不可用，请稍后重试。',
 } as const
 
@@ -327,5 +332,10 @@ export const en: Record<MarketLocaleKey, string> = {
   internalKeyInvalid: 'The current OpenAI group Key is invalid or expired. Refresh “8号仓 Token 工厂”.',
   internalPermissionDenied: 'This account is not allowed to access the internal plugin directory.',
   internalInvalidResponse: 'The private 1024Store returned an unreadable internal directory.',
+  internalAlreadyInstalled: 'This plugin is already installed in the active Profile.',
+  internalConflict: 'Another plugin operation is using the active Profile. Try again shortly.',
+  internalTimeout: 'The private DSH 1024Store request timed out. Try again.',
+  internalNetworkBlocked: 'Local DNS or proxy settings blocked the private DSH 1024Store connection.',
+  internalUpstreamError: 'The private DSH 1024Store returned a server error. Try again shortly.',
   internalUnavailable: 'The private DSH 1024Store is temporarily unavailable. Try again later.',
 } 

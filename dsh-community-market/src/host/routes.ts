@@ -161,8 +161,8 @@ function sendJson(res: ServerResponse, status: number, value: unknown): void {
 
 class InternalMarketError extends Error {
   constructor(
-    readonly status: 400 | 401 | 403 | 422 | 502 | 503,
-    readonly code: 'internal-invalid-request' | 'internal-key-required' | 'internal-key-invalid' | 'internal-permission-denied' | 'internal-service-unavailable' | 'internal-invalid-response' | 'internal-install-unsupported',
+    readonly status: 400 | 401 | 403 | 422 | 502 | 503 | 504,
+    readonly code: 'internal-invalid-request' | 'internal-key-required' | 'internal-key-invalid' | 'internal-permission-denied' | 'internal-service-unavailable' | 'internal-service-timeout' | 'internal-network-blocked' | 'internal-upstream-error' | 'internal-invalid-response' | 'internal-install-unsupported',
     message: string,
   ) {
     super(message)
@@ -337,11 +337,57 @@ function internalFailure(cause: unknown): InternalMarketError {
   if (cause instanceof CatalogNetworkError) {
     if (cause.statusCode === 401) return new InternalMarketError(401, 'internal-key-invalid', '当前 OpenAI 分组 Key 无效或已失效，请刷新“8号仓 Token 工厂”。')
     if (cause.statusCode === 403) return new InternalMarketError(403, 'internal-permission-denied', '当前账号没有访问内部插件目录的权限。')
+    if (cause.code === 'timeout') return new InternalMarketError(504, 'internal-service-timeout', '私有 DSH 1024Store 请求超时，请重试。')
+    if (cause.code === 'blocked-address') return new InternalMarketError(503, 'internal-network-blocked', '本机 DNS 或代理把私有 DSH 1024Store 解析到了受限地址。')
+    if (cause.code === 'response') return new InternalMarketError(502, 'internal-invalid-response', '私有 1024Store 返回了无法识别的数据。')
+    if (cause.code === 'http' && cause.statusCode !== undefined) {
+      return new InternalMarketError(502, 'internal-upstream-error', `私有 DSH 1024Store 返回 HTTP ${cause.statusCode}。`)
+    }
   }
   return new InternalMarketError(503, 'internal-service-unavailable', '私有 DSH 1024Store 暂时不可用，请稍后重试。')
 }
 
-function sendInternalFailure(res: ServerResponse, cause: unknown): void {
+function internalFailureDiagnostic(cause: unknown): string {
+  if (cause instanceof InternalMarketError) return `internal:${cause.code}`
+  if (cause instanceof CatalogNetworkError) {
+    return `network:${cause.code}${cause.statusCode === undefined ? '' : `:${cause.statusCode}`}`
+  }
+  if (cause instanceof Error) {
+    const code = (cause as Error & { readonly code?: unknown }).code
+    return `transport:${typeof code === 'string' && /^[A-Z0-9_]+$/u.test(code) ? code : cause.name}`
+  }
+  return 'unknown'
+}
+
+function retryableInternalFailure(cause: unknown): boolean {
+  if (cause instanceof CatalogNetworkError) {
+    return cause.code === 'timeout'
+      || cause.code === 'http' && cause.statusCode !== undefined && cause.statusCode >= 500 && cause.statusCode <= 599
+  }
+  if (!(cause instanceof Error)) return false
+  const code = (cause as Error & { readonly code?: unknown }).code
+  return typeof code === 'string' && new Set([
+    'EAI_AGAIN',
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ETIMEDOUT',
+  ]).has(code)
+}
+
+async function withInternalReadRetry<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (cause) {
+    signal.throwIfAborted()
+    if (!retryableInternalFailure(cause)) throw cause
+    return await operation()
+  }
+}
+
+function sendInternalFailure(res: ServerResponse, cause: unknown, logFailure?: (diagnostic: string) => void): void {
+  logFailure?.(internalFailureDiagnostic(cause))
   const error = internalFailure(cause)
   sendJson(res, error.status, { error: error.message, code: error.code })
 }
@@ -353,6 +399,7 @@ function sendInstallError(res: ServerResponse, cause: unknown): void {
   }
   const status = cause.code === 'invalid-request' ? 400
     : cause.code === 'not-available' ? 404
+      : cause.code === 'already-installed' ? 409
       : cause.code === 'conflict' ? 409
         : cause.code === 'intent-expired' ? 410
           : cause.code === 'verification-failed' ? 422
@@ -1003,6 +1050,11 @@ export function registerMarketRoutes(
     if (cache !== undefined) await scope.update({ catalogCache: cache })
   }
   const settingsScope = scope
+  const reportInternalFailure = (res: ServerResponse, cause: unknown): void => {
+    sendInternalFailure(res, cause, diagnostic => {
+      ctx.logger?.warn?.(`community-market: private store request failed (${diagnostic})`)
+    })
+  }
   const routes = [
     ctx.webServer.register({ kind: 'exact', path: ROUTE_STATE, handler: async (_req, res) => {
       if (generationController.signal.aborted) return
@@ -1036,16 +1088,16 @@ export function registerMarketRoutes(
       const stopWatching = abortOnDisconnect(req, res, controller)
       try {
         const key = internalKey(internalCredentialsProvider)
-        const response = await dsh1024StoreInternalHttpClient.getJson(
+        const response = await withInternalReadRetry(signal, async () => await dsh1024StoreInternalHttpClient.getJson(
           INTERNAL_AUTH_URL,
           signal,
           internalPolicy(key),
-        )
+        ))
         const payload = recordValue(response.value)
         if (payload?.ok !== true) throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid authentication response.')
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, { ok: true, identity: internalIdentity(payload.identity) })
       } catch (cause) {
-        if (!signal.aborted && !res.destroyed) sendInternalFailure(res, cause)
+        if (!signal.aborted && !res.destroyed) reportInternalFailure(res, cause)
       } finally {
         stopWatching()
       }
@@ -1070,23 +1122,19 @@ export function registerMarketRoutes(
           throw new InternalMarketError(400, 'internal-invalid-request', '内部插件目录查询参数无效。')
         }
         const key = internalKey(internalCredentialsProvider)
-        const identityResponse = await dsh1024StoreInternalHttpClient.getJson(
-          INTERNAL_AUTH_URL,
-          signal,
-          internalPolicy(key),
-        )
-        const identityBody = recordValue(identityResponse.value)
-        if (identityBody?.ok !== true) throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid authentication response.')
-        const identity = internalIdentity(identityBody.identity)
         const url = new URL(INTERNAL_PLUGINS_URL)
         url.searchParams.set('page', String(page))
         url.searchParams.set('limit', String(limit))
         if (q.length > 0) url.searchParams.set('q', q)
-        const response = await dsh1024StoreInternalHttpClient.getJson(url.href, signal, internalPolicy(key))
+        const response = await withInternalReadRetry(signal, async () => await dsh1024StoreInternalHttpClient.getJson(
+          url.href,
+          signal,
+          internalPolicy(key),
+        ))
         const normalized = internalPluginsResponse(response.value)
-        if (!signal.aborted && !res.destroyed) sendJson(res, 200, { ...normalized, identity })
+        if (!signal.aborted && !res.destroyed) sendJson(res, 200, normalized)
       } catch (cause) {
-        if (!signal.aborted && !res.destroyed) sendInternalFailure(res, cause)
+        if (!signal.aborted && !res.destroyed) reportInternalFailure(res, cause)
       } finally {
         stopWatching()
       }
@@ -1133,7 +1181,7 @@ export function registerMarketRoutes(
         }
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, result)
       } catch (cause) {
-        if (!signal.aborted && !res.destroyed) sendInternalFailure(res, cause)
+        if (!signal.aborted && !res.destroyed) reportInternalFailure(res, cause)
       } finally {
         stopWatching()
       }
@@ -1149,6 +1197,10 @@ export function registerMarketRoutes(
       try {
         const request = asInternalInstallPreview(await readJson(req, signal))
         const key = internalKey(internalCredentialsProvider)
+        // The Store consumes this single-use ticket even though its endpoint
+        // is a GET. Retrying after an ambiguous transport failure could replay
+        // a consumed capability, so only genuinely idempotent reads use the
+        // transient retry helper.
         const response = await dsh1024StoreInternalHttpClient.getJson(
           `${INTERNAL_API_PREFIX}/v1/internal/install/${encodeURIComponent(request.ticket)}`,
           signal,
@@ -1170,11 +1222,11 @@ export function registerMarketRoutes(
         try {
           if (artifact !== undefined) {
             const encoded = request.pluginId.split('/').map(encodeURIComponent).join('/')
-            const artifactResponse = await dsh1024StoreInternalArtifactHttpClient.getBytes(
+            const artifactResponse = await withInternalReadRetry(signal, async () => await dsh1024StoreInternalArtifactHttpClient.getBytes(
               `${INTERNAL_API_PREFIX}/v1/internal/plugins/${encoded}/artifact`,
               signal,
               internalPolicy(key),
-            )
+            ))
             archivePath = await writeInternalArtifact(artifactResponse.body, signal)
             preview = await installService.previewLocalArchive(
               artifact.packageName,
@@ -1205,13 +1257,14 @@ export function registerMarketRoutes(
         if (signal.aborted || res.destroyed) return
         if (cause instanceof MarketInstallError) {
           const status = cause.code === 'not-available' ? 404
+            : cause.code === 'already-installed' ? 409
             : cause.code === 'conflict' ? 409
               : cause.code === 'verification-failed' ? 422
                 : cause.code === 'invalid-request' ? 400
                   : 502
           sendJson(res, status, { error: cause.message, code: cause.code })
         } else {
-          sendInternalFailure(res, cause)
+          reportInternalFailure(res, cause)
         }
       } finally {
         stopWatching()
@@ -1229,11 +1282,11 @@ export function registerMarketRoutes(
         const request = asInternalProjectRequest(await readJson(req, signal))
         const key = internalKey(internalCredentialsProvider)
         const encoded = request.pluginId.split('/').map(encodeURIComponent).join('/')
-        const response = await dsh1024StoreInternalHttpClient.getJson(
+        const response = await withInternalReadRetry(signal, async () => await dsh1024StoreInternalHttpClient.getJson(
           `${INTERNAL_API_PREFIX}/v2/internal/plugins/${encoded}`,
           signal,
           internalPolicy(key),
-        )
+        ))
         const plugin = internalPlugin(response.value)
         if (plugin === undefined) {
           throw new InternalMarketError(502, 'internal-invalid-response', '私有 1024Store 返回了无法识别的项目介绍。')
@@ -1241,7 +1294,7 @@ export function registerMarketRoutes(
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, plugin)
       } catch (cause) {
         if (signal.aborted || res.destroyed) return
-        sendInternalFailure(res, cause)
+        reportInternalFailure(res, cause)
       } finally {
         stopWatching()
       }

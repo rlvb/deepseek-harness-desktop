@@ -94,6 +94,7 @@ export type MarketOperationResult =
 export type MarketInstallErrorCode =
   | 'invalid-request'
   | 'not-available'
+  | 'already-installed'
   | 'conflict'
   | 'intent-expired'
   | 'verification-failed'
@@ -464,7 +465,7 @@ function profileReferencesPlugin(manifest: JsonManifest, packageName: string): b
 async function assertNotInstalled(profile: MarketDesktopProfile, packageName: string): Promise<void> {
   const profileManifest = await readManifest(join(profile.dir, 'package.json'))
   if (profileReferencesPlugin(profileManifest, packageName)) {
-    throw new MarketInstallError('conflict', 'This plugin is already managed by the active profile.')
+    throw new MarketInstallError('already-installed', 'This plugin is already installed in the active Profile.')
   }
 }
 

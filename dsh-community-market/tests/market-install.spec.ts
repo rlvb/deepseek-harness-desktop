@@ -315,6 +315,31 @@ describe('simplified Profile package operations', () => {
     await expect(readFile(archivePath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it('reports an already-installed internal archive without running the package manager', async () => {
+    const profileDir = await createProfile()
+    await writeInstalledProfile(profileDir)
+    const archivePath = join(profileDir, 'internal-source.tgz')
+    await writeFile(archivePath, Buffer.from('fixture archive'))
+    const run = vi.fn()
+    const service = new MarketInstallService(
+      () => ({ name: 'web', dir: profileDir }),
+      { run } as unknown as MarketDesktopPnpm,
+      { verify: vi.fn() },
+    )
+
+    await expect(service.previewLocalArchive(
+      packageName,
+      version,
+      archivePath,
+      'Internal archive plugin',
+      new AbortController().signal,
+    )).rejects.toMatchObject({
+      code: 'already-installed',
+      message: 'This plugin is already installed in the active Profile.',
+    })
+    expect(run).not.toHaveBeenCalled()
+  })
+
   it('rejects an internal archive whose materialized package identity differs from its approval', async () => {
     const profileDir = await createProfile()
     const archivePath = join(profileDir, 'internal-source.tgz')

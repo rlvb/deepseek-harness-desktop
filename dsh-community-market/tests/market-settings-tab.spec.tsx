@@ -330,6 +330,15 @@ describe('MarketSettingsTab', () => {
       displayName: internal.plugins[0]!.name,
     }, expect.any(AbortSignal))
 
+    fireEvent.click(screen.getByRole('button', { name: en.cancel }))
+    vi.mocked(previewMarketInternalInstall).mockRejectedValueOnce(Object.assign(
+      new Error('This plugin is already installed in the active Profile.'),
+      { status: 409, code: 'already-installed' },
+    ))
+    fireEvent.click(screen.getByRole('button', { name: en.internalOneClickInstall }))
+    expect(await screen.findByText(en.internalAlreadyInstalled)).toBeTruthy()
+    expect(screen.queryByText(en.internalUnavailable)).toBeNull()
+
   })
 
   it('opens on Installable by default', async () => {

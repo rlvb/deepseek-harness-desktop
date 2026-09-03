@@ -155,8 +155,20 @@ function internalFailureMessage(cause: unknown, t: MarketSettingsTabProps['t']):
   if (code === 'internal-key-invalid') return t('internalKeyInvalid')
   if (code === 'internal-permission-denied') return t('internalPermissionDenied')
   if (code === 'internal-invalid-response') return t('internalInvalidResponse')
+  if (code === 'already-installed') return t('internalAlreadyInstalled')
+  if (code === 'conflict') return t('internalConflict')
+  if (code === 'internal-service-timeout') return t('internalTimeout')
+  if (code === 'internal-network-blocked') return t('internalNetworkBlocked')
+  if (code === 'internal-upstream-error') return t('internalUpstreamError')
   if (code === 'internal-install-unsupported' || code === 'verification-failed') {
     return t('internalInstallUnavailable')
+  }
+  if (code === 'internal-service-unavailable') return t('internalUnavailable')
+  // Package-operation errors are safe Host-authored messages. Keeping their
+  // exact reason prevents a local Profile conflict from being mislabeled as
+  // a private Store outage.
+  if (typeof code === 'string' && cause instanceof Error && cause.message.trim().length > 0) {
+    return cause.message
   }
   return t('internalUnavailable')
 }
