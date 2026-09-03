@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -267,7 +267,28 @@ describe('simplified Profile package operations', () => {
     const calls: string[][] = []
     const service = new MarketInstallService(
       () => ({ name: 'web', dir: profileDir }),
-      runner(profileDir, calls),
+      {
+        run(argv) {
+          calls.push([...argv])
+          return {
+            stdout: Readable.from([]),
+            stderr: Readable.from([]),
+            done: (async () => {
+              const target = argv.at(-1)
+              if (target === undefined) throw new Error('missing archive target')
+              await writeInstalledProfile(profileDir, packageName, `file:${new URL(target).pathname}`)
+              const installedDir = join(profileDir, 'node_modules', packageName)
+              await mkdir(installedDir, { recursive: true })
+              await writeFile(join(installedDir, 'package.json'), JSON.stringify({
+                name: packageName,
+                version,
+              }))
+              return { exitCode: 0, signal: null }
+            })(),
+            cancel: vi.fn(),
+          }
+        },
+      },
       { verify: vi.fn() },
     )
 
@@ -286,8 +307,55 @@ describe('simplified Profile package operations', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]?.slice(0, 2)).toEqual(['add', '--save-exact'])
     expect(calls[0]?.[2]).toMatch(/^file:\/\/\/.*\.dsh-internal-artifacts\/dsh-plugin-safe-1\.2\.3\.tgz$/u)
+    expect(JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8'))).toMatchObject({
+      dependencies: { [packageName]: expect.stringMatching(/^file:/u) },
+      dsh: { profile: { bundles: [packageName] } },
+    })
     await expect(readFile(join(profileDir, '.dsh-internal-artifacts', 'dsh-plugin-safe-1.2.3.tgz'))).resolves.toEqual(Buffer.from('fixture archive'))
     await expect(readFile(archivePath)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('rejects an internal archive whose materialized package identity differs from its approval', async () => {
+    const profileDir = await createProfile()
+    const archivePath = join(profileDir, 'internal-source.tgz')
+    await writeFile(archivePath, Buffer.from('fixture archive'))
+    const service = new MarketInstallService(
+      () => ({ name: 'web', dir: profileDir }),
+      {
+        run(argv) {
+          return {
+            stdout: Readable.from([]),
+            stderr: Readable.from([]),
+            done: (async () => {
+              const target = argv.at(-1)
+              if (target === undefined) throw new Error('missing archive target')
+              await writeInstalledProfile(profileDir, packageName, `file:${new URL(target).pathname}`)
+              const installedDir = join(profileDir, 'node_modules', packageName)
+              await mkdir(installedDir, { recursive: true })
+              await writeFile(join(installedDir, 'package.json'), JSON.stringify({
+                name: packageName,
+                version: '9.9.9',
+              }))
+              return { exitCode: 0, signal: null }
+            })(),
+            cancel: vi.fn(),
+          }
+        },
+      },
+      { verify: vi.fn() },
+    )
+
+    const preview = await service.previewLocalArchive(
+      packageName,
+      version,
+      archivePath,
+      'Internal archive plugin',
+      new AbortController().signal,
+    )
+
+    await expect(service.executePreview(preview.intent, new AbortController().signal)).rejects.toMatchObject({
+      code: 'operation-failed',
+    })
   })
 
   it('returns bounded pnpm output and writes the same failure to the Desktop log', async () => {

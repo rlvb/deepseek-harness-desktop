@@ -480,11 +480,30 @@ async function directProfilePluginVersion(
   packageName: string,
 ): Promise<string> {
   const manifest = await readManifest(join(profile.dir, 'package.json'))
-  const version = profileDependency(manifest, packageName)
-  if (version === undefined || !profileBundles(manifest).includes(packageName)) {
+  const dependency = profileDependency(manifest, packageName)
+  if (dependency === undefined || !profileBundles(manifest).includes(packageName)) {
     throw new MarketInstallError('conflict', 'This plugin is no longer a direct dependency of the active Profile.')
   }
-  return version
+  // Registry installs use an exact semver dependency, but pnpm deliberately
+  // records a Profile-local internal archive as `file:...tgz`. In that case
+  // the dependency value identifies the source, not the installed package
+  // version, so validate the materialized package manifest instead.
+  if (stableExactVersion(dependency)) return dependency
+  let installed: JsonManifest
+  try {
+    installed = await readManifest(join(
+      profile.dir,
+      'node_modules',
+      ...packageName.split('/'),
+      'package.json',
+    ))
+  } catch {
+    throw new MarketInstallError('conflict', 'The installed plugin package manifest is unavailable.')
+  }
+  if (installed.name !== packageName || !stableExactVersion(installed.version)) {
+    throw new MarketInstallError('conflict', 'The installed plugin package identity is invalid.')
+  }
+  return installed.version
 }
 
 /** Host-owned install workflow. No provider command or Renderer package spec crosses this boundary. */
