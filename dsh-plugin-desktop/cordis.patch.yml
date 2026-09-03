@@ -26,3 +26,10 @@
     printUrl: false
     surfaceContext: true
     trustedHosts: []
+
+# Enterprise builds start new agents on the 8号仓 OpenAI-compatible route.
+# The setting remains user-overridable through the normal default-model UI.
+- id: agent-default-model
+  config:
+    provider: bhctokenapi
+    model: qwen3.8-27b

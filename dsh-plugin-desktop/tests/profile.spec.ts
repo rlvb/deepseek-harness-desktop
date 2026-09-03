@@ -454,21 +454,29 @@ virtualStoreDirMaxLength: 60
     )).toThrow('LAN address "desktop.internal" is not an IPv4 literal')
   })
 
-  it('keeps both Market providers absent until the user explicitly enables one', () => {
+  it('enables the community Market and enterprise default model for a fresh profile', () => {
     const home = temporaryHome()
     const prepared = prepareDesktopProfile(undefined, home, 'darwin')
     const rows = composeEntries([prepared.patches])
 
     expect(prepared.market).toEqual({
-      requested: 'disabled',
-      effective: 'disabled',
+      requested: 'community-market',
+      effective: 'community-market',
       legacyDefaulted: true,
     })
-    expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.community.rowId
-      || row.id === DESKTOP_MARKET_IDENTITIES.dshMarket.rowId)).toBe(false)
+    expect(rows.filter(row => row.id === DESKTOP_MARKET_IDENTITIES.community.rowId)).toEqual([{
+      id: DESKTOP_MARKET_IDENTITIES.community.rowId,
+      name: DESKTOP_MARKET_IDENTITIES.community.packageName,
+    }])
+    expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.dshMarket.rowId)).toBe(false)
+    expect(rows).toContainEqual(expect.objectContaining({
+      id: 'agent-default-model',
+      name: '@deepseek-ai/dsh-agent-default-model',
+      config: { provider: 'bhctokenapi', model: 'qwen3.8-27b' },
+    }))
   })
 
-  it('inserts the community Market as one canonical row only after explicit selection', () => {
+  it('inserts the community Market as one canonical row after explicit selection', () => {
     const home = temporaryHome()
     const prepared = prepareDesktopProfile(undefined, home, 'darwin', 'desktop', undefined, {
       requested: 'community-market',
@@ -633,7 +641,7 @@ virtualStoreDirMaxLength: 60
     const prepared = prepareDesktopProfile(undefined, home, 'darwin')
     const rows = composeEntries([prepared.patches])
 
-    expect(prepared.market.effective).toBe('disabled')
+    expect(prepared.market.effective).toBe('community-market')
     expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.dshMarket.rowId)).toBe(false)
   })
 
