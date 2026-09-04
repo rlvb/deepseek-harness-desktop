@@ -340,6 +340,57 @@ describe('simplified Profile package operations', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  it('replaces an installed internal archive when an older or newer approved version is selected', async () => {
+    const profileDir = await createProfile()
+    await writeInstalledProfile(profileDir, packageName, '1.0.0')
+    const archivePath = join(profileDir, 'internal-source.tgz')
+    await writeFile(archivePath, Buffer.from('fixture archive'))
+    const calls: string[][] = []
+    const service = new MarketInstallService(
+      () => ({ name: 'web', dir: profileDir }),
+      {
+        run(argv) {
+          calls.push([...argv])
+          return {
+            stdout: Readable.from([]),
+            stderr: Readable.from([]),
+            done: (async () => {
+              const target = argv.at(-1)
+              if (target === undefined) throw new Error('missing archive target')
+              await writeInstalledProfile(profileDir, packageName, `file:${new URL(target).pathname}`)
+              const installedDir = join(profileDir, 'node_modules', packageName)
+              await mkdir(installedDir, { recursive: true })
+              await writeFile(join(installedDir, 'package.json'), JSON.stringify({ name: packageName, version }))
+              return { exitCode: 0, signal: null }
+            })(),
+            cancel: vi.fn(),
+          }
+        },
+      },
+      { verify: vi.fn() },
+    )
+
+    const preview = await service.previewLocalArchive(
+      packageName,
+      version,
+      archivePath,
+      'Internal archive plugin',
+      new AbortController().signal,
+      { allowReplace: true },
+    )
+    expect(preview).toMatchObject({ operation: 'replace', previousVersion: '1.0.0' })
+    await expect(service.executePreview(preview.intent, new AbortController().signal)).resolves.toMatchObject({
+      action: 'install',
+      packageName,
+      version,
+    })
+    expect(calls).toHaveLength(1)
+    expect(JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8'))).toMatchObject({
+      dependencies: { [packageName]: expect.stringMatching(/^file:/u) },
+      dsh: { profile: { bundles: [packageName] } },
+    })
+  })
+
   it('rejects an internal archive whose materialized package identity differs from its approval', async () => {
     const profileDir = await createProfile()
     const archivePath = join(profileDir, 'internal-source.tgz')

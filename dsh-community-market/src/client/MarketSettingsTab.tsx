@@ -591,7 +591,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
     }
   }
 
-  const beginInternalInstall = async (plugin: MarketInternalPlugin) => {
+  const beginInternalInstall = async (plugin: MarketInternalPlugin, versionId?: number) => {
     if (internalTicketPending || operationRequest.current !== undefined) return
     const request = new AbortController()
     operationRequest.current = request
@@ -608,11 +608,15 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
     selectedInternalRequest.current?.abort()
     setSelectedInternal(undefined)
     try {
-      const ticket = await issueMarketInternalInstallTicket(plugin.id, request.signal)
+      const ticket = versionId === undefined
+        ? await issueMarketInternalInstallTicket(plugin.id, request.signal)
+        : await issueMarketInternalInstallTicket(plugin.id, versionId, request.signal)
       if (request.signal.aborted || operationRequest.current !== request) return
       const preview = await previewMarketInternalInstall({
         pluginId: plugin.id,
         ticket: ticket.ticket,
+        ...(ticket.artifactToken === undefined ? {} : { artifactToken: ticket.artifactToken }),
+        ...(versionId === undefined ? {} : { versionId }),
         displayName: plugin.name,
       }, request.signal)
       if (request.signal.aborted || operationRequest.current !== request) return
@@ -1181,7 +1185,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
             onSearch={() => { void loadInternal(false, internalQuery) }}
             onRefresh={() => { void loadInternal(true, internalAppliedQuery) }}
             onRetry={() => { void loadInternal(false, internalAppliedQuery) }}
-            onInstall={plugin => { void beginInternalInstall(plugin) }}
+            onInstall={(plugin, versionId) => { void beginInternalInstall(plugin, versionId) }}
             onOpenProject={plugin => { void openInternalProject(plugin) }}
             t={t}
           />
@@ -1270,7 +1274,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
             setSelectedInternalLoading(false)
             setSelectedInternal(undefined)
           }}
-          onInstall={() => { void beginInternalInstall(selectedInternal) }}
+          onInstall={versionId => { void beginInternalInstall(selectedInternal, versionId) }}
           t={t}
         />
       )}
@@ -1345,11 +1349,12 @@ function InternalPluginsView(props: {
   onSearch: () => void
   onRefresh: () => void
   onRetry: () => void
-  onInstall: (plugin: MarketInternalPlugin) => void
+  onInstall: (plugin: MarketInternalPlugin, versionId?: number) => void
   onOpenProject: (plugin: MarketInternalPlugin) => void
   t: MarketSettingsTabProps['t']
 }) {
   const chinese = props.locale.toLowerCase().startsWith('zh')
+  const [selectedVersions, setSelectedVersions] = useState<Record<string, number>>({})
   if (!props.loaded && props.loading) return (
     <div className="dshMarketEmpty"><StateDot state="ongoing" size={16} /><p>{props.t('internalLoading')}</p></div>
   )
@@ -1405,14 +1410,32 @@ function InternalPluginsView(props: {
               <div className="dshMarketTags">
                 <Pill>{plugin.category}</Pill>
                 <Pill>{plugin.ownerUsername}</Pill>
+                {plugin.version !== undefined && <Pill>v{plugin.version}</Pill>}
               </div>
+              {plugin.versions !== undefined && plugin.versions.length > 0 && (
+                <label className="dshMarketInternalVersionPicker">
+                  <span>{chinese ? '安装版本' : 'Version'}</span>
+                  <select
+                    value={selectedVersions[plugin.id] ?? plugin.versions.find(version => version.isCurrent)?.id ?? plugin.versions[0]!.id}
+                    disabled={props.ticketPending}
+                    onChange={event => setSelectedVersions(current => ({ ...current, [plugin.id]: Number(event.currentTarget.value) }))}
+                  >
+                    {plugin.versions.map(version => (
+                      <option key={version.id} value={version.id}>
+                        {version.version === undefined ? version.sourceCommit ?? `#${version.id}` : `v${version.version}`}
+                        {version.isCurrent ? (chinese ? '（当前）' : ' (current)') : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="dshMarketInternalCardActions">
                 <Button
                   variant="primary"
                   size="sm"
                   disabled={props.ticketPending}
-                  onClick={() => props.onInstall(plugin)}
-                >{props.ticketPending ? '…' : props.t('internalOneClickInstall')}</Button>
+                  onClick={() => props.onInstall(plugin, selectedVersions[plugin.id] ?? plugin.versions?.find(version => version.isCurrent)?.id)}
+                >{props.ticketPending ? '…' : (plugin.versions !== undefined && plugin.versions.length > 1 ? props.t('internalInstallVersion') : props.t('internalOneClickInstall'))}</Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1435,11 +1458,15 @@ function InternalProjectModal({ plugin, locale, pending, loading, error, onClose
   loading: boolean
   error?: string | undefined
   onClose: () => void
-  onInstall: () => void
+  onInstall: (versionId?: number) => void
   t: MarketSettingsTabProps['t']
 }) {
   const chinese = locale.toLowerCase().startsWith('zh')
   const description = chinese ? plugin.description.zh : plugin.description.en
+  const versions = plugin.versions ?? []
+  const [selectedVersionId, setSelectedVersionId] = useState<number | undefined>(
+    plugin.versions?.find(version => version.isCurrent)?.id ?? plugin.versions?.[0]?.id,
+  )
   return (
     <Modal
       open
@@ -1455,8 +1482,8 @@ function InternalProjectModal({ plugin, locale, pending, loading, error, onClose
           variant="primary"
           icon={<IconDownloadOutline16 />}
           disabled={pending}
-          onClick={onInstall}
-        >{pending ? t('installing') : t('internalOneClickInstall')}</Button>
+          onClick={() => onInstall(selectedVersionId)}
+        >{pending ? t('installing') : (versions.length > 1 ? t('internalInstallVersion') : t('internalOneClickInstall'))}</Button>
       </div>}
     >
       <div className="dshMarketDetails dshMarketInternalProject">
@@ -1471,6 +1498,18 @@ function InternalProjectModal({ plugin, locale, pending, loading, error, onClose
           <div><dt>{t('category')}</dt><dd>{plugin.category}</dd></div>
           <div><dt>{t('owner')}</dt><dd>{plugin.ownerUsername}</dd></div>
           {plugin.approvedCommit !== null && <div><dt>{t('approvedCommit')}</dt><dd>{plugin.approvedCommit}</dd></div>}
+          {versions.length > 0 && <div>
+            <dt>{chinese ? '安装版本' : 'Version'}</dt>
+            <dd>
+              <select
+                value={selectedVersionId ?? ''}
+                disabled={pending}
+                onChange={event => setSelectedVersionId(Number(event.currentTarget.value))}
+              >
+                {versions.map(version => <option key={version.id} value={version.id}>{version.version ?? version.sourceCommit ?? `#${version.id}`}{version.isCurrent ? (chinese ? '（当前）' : ' (current)') : ''}</option>)}
+              </select>
+            </dd>
+          </div>}
         </dl>
         {error !== undefined && <div className="dshMarketError" role="alert">{error}</div>}
       </div>

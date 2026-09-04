@@ -20,6 +20,7 @@ import type {
   MarketInternalIdentity,
   MarketInternalInstallTicketResponse,
   MarketInternalInstallPreviewRequest,
+  MarketInternalPluginVersion,
   MarketInternalProjectRequest,
   MarketInternalPlugin,
   MarketInternalPluginsResponse,
@@ -235,6 +236,37 @@ function internalPlugin(value: unknown): MarketInternalPlugin | undefined {
   if (id === undefined || name === undefined || repository === undefined || category === undefined
     || en === undefined || zh === undefined || added === undefined || updatedAt === undefined
     || ownerUsername === undefined) return undefined
+  const versions: MarketInternalPluginVersion[] = Array.isArray(source.versions)
+    ? source.versions.flatMap(versionValue => {
+      const version = recordValue(versionValue)
+      const id = typeof version?.id === 'number' && Number.isSafeInteger(version.id) && version.id >= 1 ? version.id : undefined
+      const sourceCommit = version?.sourceCommit
+      const packageName = version?.packageName
+      const versionNumber = version?.version
+      const isCurrent = version?.isCurrent
+      const reviewStatus = typeof version?.reviewStatus === 'string'
+        && ['draft', 'pending', 'approved', 'rejected', 'disabled'].includes(version.reviewStatus)
+        ? version.reviewStatus as NonNullable<MarketInternalPluginVersion['reviewStatus']>
+        : undefined
+      if (id === undefined
+        || (typeof sourceCommit !== 'string' && sourceCommit !== null)
+        || (packageName !== undefined && (typeof packageName !== 'string' || !INTERNAL_PACKAGE_NAME_PATTERN.test(packageName)))
+        || (versionNumber !== undefined && (typeof versionNumber !== 'string' || !INTERNAL_STABLE_VERSION_PATTERN.test(versionNumber)))
+        || typeof isCurrent !== 'boolean') return []
+      return [{
+        id,
+        sourceCommit,
+        ...(typeof packageName === 'string' ? { packageName } : {}),
+        ...(typeof versionNumber === 'string' ? { version: versionNumber } : {}),
+        ...(reviewStatus === undefined ? {} : { reviewStatus }),
+        ...(version?.reviewComment === null || typeof version?.reviewComment === 'string' ? { reviewComment: version.reviewComment } : {}),
+        ...(version?.reviewedByUsername === null || typeof version?.reviewedByUsername === 'string' ? { reviewedByUsername: version.reviewedByUsername } : {}),
+        ...(version?.approvedAt === null || typeof version?.approvedAt === 'string' ? { approvedAt: version.approvedAt } : {}),
+        ...(typeof version?.createdAt === 'string' ? { createdAt: version.createdAt } : {}),
+        isCurrent,
+      }]
+    })
+    : []
   return {
     id,
     name,
@@ -249,6 +281,11 @@ function internalPlugin(value: unknown): MarketInternalPlugin | undefined {
     reviewStatus: 'approved',
     sourceCommit: typeof source.sourceCommit === 'string' || source.sourceCommit === null ? source.sourceCommit : null,
     approvedCommit: typeof source.approvedCommit === 'string' || source.approvedCommit === null ? source.approvedCommit : null,
+    ...(typeof source.packageName === 'string' && INTERNAL_PACKAGE_NAME_PATTERN.test(source.packageName) ? { packageName: source.packageName } : {}),
+    ...(typeof source.version === 'string' && INTERNAL_STABLE_VERSION_PATTERN.test(source.version) ? { version: source.version } : {}),
+    ...(typeof source.currentApprovedVersionId === 'number' && Number.isSafeInteger(source.currentApprovedVersionId) ? { currentApprovedVersionId: source.currentApprovedVersionId } : {}),
+    ...(typeof source.pendingVersionId === 'number' && Number.isSafeInteger(source.pendingVersionId) ? { pendingVersionId: source.pendingVersionId } : {}),
+    versions,
   }
 }
 
@@ -262,7 +299,15 @@ function internalInstallArtifact(value: unknown): NonNullable<MarketInternalInst
   const version = boundedText(source?.version, 64)
   if (kind !== 'gitea-tarball' || packageName === undefined || !INTERNAL_PACKAGE_NAME_PATTERN.test(packageName)
     || version === undefined || !INTERNAL_STABLE_VERSION_PATTERN.test(version)) return undefined
-  return { kind, packageName, version }
+  const versionId = source?.versionId
+  if (versionId !== undefined && !positiveInteger(versionId)) return undefined
+  return {
+    kind,
+    ...(versionId === undefined ? {} : { versionId: Number(versionId) }),
+    ...(typeof source?.sourceCommit === 'string' ? { sourceCommit: source.sourceCommit } : {}),
+    packageName,
+    version,
+  }
 }
 
 async function writeInternalArtifact(bytes: Uint8Array, signal: AbortSignal): Promise<string> {
@@ -714,6 +759,10 @@ function boundedIdentifier(value: unknown): value is string {
   return typeof value === 'string' && value.length >= 1 && value.length <= 240 && !value.includes('\0')
 }
 
+function positiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1
+}
+
 function asOperationPreview(value: unknown): MarketOperationPreviewRequest {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new MarketInstallError('invalid-request', 'Invalid package operation preview request.')
@@ -738,15 +787,21 @@ function asInternalInstallPreview(value: unknown): MarketInternalInstallPreviewR
     throw new InternalMarketError(400, 'internal-invalid-request', '内部插件安装请求无效。')
   }
   const request = value as Record<string, unknown>
-  if (!exactKeys(request, ['displayName', 'pluginId', 'ticket'])
+  const keys = Object.keys(request)
+  if (!keys.every(key => key === 'displayName' || key === 'pluginId' || key === 'ticket' || key === 'artifactToken' || key === 'versionId')
+    || !keys.includes('displayName') || !keys.includes('pluginId') || !keys.includes('ticket')
     || !boundedIdentifier(request.pluginId)
     || !boundedIdentifier(request.ticket)
-    || boundedText(request.displayName, 200) === undefined) {
+    || boundedText(request.displayName, 200) === undefined
+    || (request.artifactToken !== undefined && !boundedIdentifier(request.artifactToken))
+    || (request.versionId !== undefined && !positiveInteger(request.versionId))) {
     throw new InternalMarketError(400, 'internal-invalid-request', '内部插件安装请求无效。')
   }
   return {
     pluginId: request.pluginId,
     ticket: request.ticket,
+    ...(typeof request.artifactToken === 'string' ? { artifactToken: request.artifactToken } : {}),
+    ...(typeof request.versionId === 'number' ? { versionId: request.versionId } : {}),
     displayName: request.displayName as string,
   }
 }
@@ -1150,7 +1205,10 @@ export function registerMarketRoutes(
       try {
         const body = recordValue(await readJson(req, signal))
         const pluginId = body?.pluginId
-        if (!exactKeys(body ?? {}, ['pluginId']) || !boundedIdentifier(pluginId)) {
+        const versionId = body?.versionId
+        if (!exactKeys(body ?? {}, versionId === undefined ? ['pluginId'] : ['pluginId', 'versionId'])
+          || !boundedIdentifier(pluginId)
+          || (versionId !== undefined && !positiveInteger(versionId))) {
           throw new InternalMarketError(400, 'internal-invalid-request', '内部插件标识无效。')
         }
         const key = internalKey(internalCredentialsProvider)
@@ -1158,7 +1216,7 @@ export function registerMarketRoutes(
         const response = await dsh1024StoreInternalHttpClient.postJson(
           `${INTERNAL_API_PREFIX}/v1/internal/plugins/${encoded}/install-ticket`,
           signal,
-          {},
+          versionId === undefined ? {} : { versionId },
           internalPolicy(key),
         )
         const payload = recordValue(response.value)
@@ -1166,9 +1224,12 @@ export function registerMarketRoutes(
         const install = boundedText(payload?.install, 500)
         const returnedPluginId = boundedText(payload?.pluginId, 256)
         const expiresAt = boundedText(payload?.expiresAt, 64)
+        const artifactToken = boundedText(payload?.artifactToken, 256)
+        const returnedVersionId = payload?.versionId
         const artifact = internalInstallArtifact(payload?.artifact)
         if (payload?.ok !== true || ticket === undefined || (install === undefined && artifact === undefined)
-          || returnedPluginId === undefined || expiresAt === undefined) {
+          || returnedPluginId === undefined || expiresAt === undefined
+          || (returnedVersionId !== undefined && !positiveInteger(returnedVersionId))) {
           throw new InternalMarketError(502, 'internal-invalid-response', 'The private market returned an invalid install ticket.')
         }
         const result: MarketInternalInstallTicketResponse = {
@@ -1177,6 +1238,8 @@ export function registerMarketRoutes(
           install: install ?? '',
           ticket,
           expiresAt,
+          ...(artifactToken === undefined ? {} : { artifactToken }),
+          ...(typeof returnedVersionId === 'number' ? { versionId: returnedVersionId } : {}),
           ...(artifact === undefined ? {} : { artifact }),
         }
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, result)
@@ -1210,7 +1273,8 @@ export function registerMarketRoutes(
         const returnedPluginId = boundedText(payload?.pluginId, 256)
         const install = boundedText(payload?.install, 500)
         const artifact = internalInstallArtifact(payload?.artifact)
-        if (payload?.ok !== true || returnedPluginId !== request.pluginId || (install === undefined && artifact === undefined)) {
+        if (payload?.ok !== true || returnedPluginId !== request.pluginId || (install === undefined && artifact === undefined)
+          || (request.versionId !== undefined && payload?.versionId !== request.versionId)) {
           throw new InternalMarketError(502, 'internal-invalid-response', '私有 1024Store 返回了无法识别的安装授权。')
         }
         const installService = installProvider?.get()
@@ -1221,20 +1285,33 @@ export function registerMarketRoutes(
         let preview
         try {
           if (artifact !== undefined) {
+            const artifactToken = boundedText(request.artifactToken, 256)
             const encoded = request.pluginId.split('/').map(encodeURIComponent).join('/')
+            const artifactUrl = artifactToken === undefined
+              ? `${INTERNAL_API_PREFIX}/v1/internal/plugins/${encoded}/artifact`
+              : `${INTERNAL_API_PREFIX}/v1/internal/install-artifact/${encodeURIComponent(artifactToken)}`
             const artifactResponse = await withInternalReadRetry(signal, async () => await dsh1024StoreInternalArtifactHttpClient.getBytes(
-              `${INTERNAL_API_PREFIX}/v1/internal/plugins/${encoded}/artifact`,
+              artifactUrl,
               signal,
               internalPolicy(key),
             ))
             archivePath = await writeInternalArtifact(artifactResponse.body, signal)
-            preview = await installService.previewLocalArchive(
-              artifact.packageName,
-              artifact.version,
-              archivePath,
-              request.displayName,
-              signal,
-            )
+            preview = installService.previewLocalArchive.length >= 5
+              ? await installService.previewLocalArchive(
+                artifact.packageName,
+                artifact.version,
+                archivePath,
+                request.displayName,
+                signal,
+                { allowReplace: true },
+              )
+              : await installService.previewLocalArchive(
+                artifact.packageName,
+                artifact.version,
+                archivePath,
+                request.displayName,
+                signal,
+              )
             // The install service owns the temporary archive until execute or expiry.
             archivePath = undefined
           } else {

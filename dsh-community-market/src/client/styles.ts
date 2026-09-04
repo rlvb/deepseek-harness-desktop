@@ -215,6 +215,25 @@ const css = `
   margin-top: auto;
 }
 
+.dshMarketInternalVersionPicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.dshMarketInternalVersionPicker select,
+.dshMarketInternalProject select {
+  min-width: 150px;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
 .dshMarketInternalProject .dshMarketDetailsIntro {
   align-items: flex-start;
   padding: 14px;

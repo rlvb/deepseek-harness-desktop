@@ -146,8 +146,26 @@ export interface MarketInternalPlugin {
   readonly reviewStatus: 'approved'
   readonly sourceCommit: string | null
   readonly approvedCommit: string | null
+  readonly packageName?: string
+  readonly version?: string
+  readonly currentApprovedVersionId?: number | null
+  readonly pendingVersionId?: number | null
+  readonly versions?: readonly MarketInternalPluginVersion[]
   /** README returned only by the Host-authorized internal project detail call. */
   readonly readme?: string
+}
+
+export interface MarketInternalPluginVersion {
+  readonly id: number
+  readonly sourceCommit: string | null
+  readonly packageName?: string
+  readonly version?: string
+  readonly reviewStatus?: 'draft' | 'pending' | 'approved' | 'rejected' | 'disabled'
+  readonly reviewComment?: string | null
+  readonly reviewedByUsername?: string | null
+  readonly approvedAt?: string | null
+  readonly createdAt?: string
+  readonly isCurrent: boolean
 }
 
 export interface MarketInternalPluginsResponse {
@@ -171,15 +189,21 @@ export interface MarketInternalInstallTicketResponse {
   /** Present for approved private Gitea plugins that support Host-side install. */
   readonly artifact?: {
     readonly kind: 'gitea-tarball'
+    readonly versionId?: number
+    readonly sourceCommit?: string
     readonly packageName: string
     readonly version: string
   }
+  readonly artifactToken?: string
+  readonly versionId?: number
 }
 
 /** Renderer request for the Host-owned internal plugin install handoff. */
 export interface MarketInternalInstallPreviewRequest {
   readonly pluginId: string
   readonly ticket: string
+  readonly artifactToken?: string
+  readonly versionId?: number
   readonly displayName: string
 }
 
@@ -203,6 +227,8 @@ export type MarketOperationPreviewRequest =
 /** Host-verified facts shown before the user confirms a package mutation. */
 export interface MarketOperationPreviewResponse {
   readonly action: 'install' | 'uninstall'
+  readonly operation?: 'install' | 'replace'
+  readonly previousVersion?: string
   readonly profileName: string
   readonly packageName: string
   readonly version?: string

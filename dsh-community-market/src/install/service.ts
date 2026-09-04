@@ -61,6 +61,8 @@ export interface MarketDesktopPnpm {
 export interface MarketInstallPreview {
   readonly intent: string
   readonly action: 'install'
+  readonly operation: 'install' | 'replace'
+  readonly previousVersion?: string
   readonly profileName: string
   readonly packageName: string
   readonly version: string
@@ -185,6 +187,7 @@ interface InstallCandidate {
   readonly source?: NormalizedGitHubInstallSource
   /** Host-downloaded archive for an approved private-market plugin. */
   readonly localArchivePath?: string
+  readonly replaceExisting?: boolean
   readonly savedAt: number
 }
 
@@ -469,6 +472,15 @@ async function assertNotInstalled(profile: MarketDesktopProfile, packageName: st
   }
 }
 
+async function installedProfilePluginVersion(
+  profile: MarketDesktopProfile,
+  packageName: string,
+): Promise<string | undefined> {
+  const manifest = await readManifest(join(profile.dir, 'package.json'))
+  if (!profileReferencesPlugin(manifest, packageName)) return undefined
+  return await directProfilePluginVersion(profile, packageName)
+}
+
 async function assertRemoved(profile: MarketDesktopProfile, packageName: string): Promise<void> {
   const profileManifest = await readManifest(join(profile.dir, 'package.json'))
   if (profileReferencesPlugin(profileManifest, packageName)) {
@@ -662,6 +674,7 @@ export class MarketInstallService {
     return {
       intent: token,
       action: 'install',
+      operation: 'install',
       profileName: profile.name,
       packageName,
       version: verification.version,
@@ -724,6 +737,7 @@ export class MarketInstallService {
     return {
       intent: token,
       action: 'install',
+      operation: 'install',
       profileName: profile.name,
       packageName: verifiedPackageName,
       version: verification.version,
@@ -744,6 +758,7 @@ export class MarketInstallService {
     archivePath: string,
     displayName: string,
     signal: AbortSignal,
+    options: { readonly allowReplace?: boolean } = {},
   ): Promise<MarketInstallPreview> {
     const operationSignal = this.operationSignal(signal)
     operationSignal.throwIfAborted()
@@ -761,7 +776,11 @@ export class MarketInstallService {
       throw new MarketInstallError('verification-failed', 'The internal plugin archive is unavailable.')
     }
     const profile = this.profile()
-    await assertNotInstalled(profile, packageName)
+    const previousVersion = options.allowReplace === true
+      ? await installedProfilePluginVersion(profile, packageName)
+      : undefined
+    if (options.allowReplace !== true) await assertNotInstalled(profile, packageName)
+    if (previousVersion === version) throw new MarketInstallError('already-installed', 'This plugin version is already installed in the active Profile.')
     const candidate: InstallCandidate = Object.freeze({
       key: candidateKey('internal-archive', `${packageName}:${opaqueToken()}`),
       sourceRecordId: 'internal-archive',
@@ -770,6 +789,7 @@ export class MarketInstallService {
       displayName: displayName.trim().length > 0 ? displayName.trim() : packageName,
       packageName,
       localArchivePath: archivePath,
+      ...(options.allowReplace === true ? { replaceExisting: true } : {}),
       savedAt: this.now(),
     })
     this.candidates.set(candidate.key, candidate)
@@ -783,10 +803,12 @@ export class MarketInstallService {
         profile,
         expiresAt: this.now() + this.intentTtlMs,
       })
-      return {
-        intent: token,
-        action: 'install',
-        profileName: profile.name,
+    return {
+      intent: token,
+      action: 'install',
+      operation: previousVersion === undefined ? 'install' : 'replace',
+      ...(previousVersion === undefined ? {} : { previousVersion }),
+      profileName: profile.name,
         packageName,
         version,
         displayName: candidate.displayName,
@@ -815,7 +837,13 @@ export class MarketInstallService {
         if (packageName === undefined || !safePackageName(packageName)) {
           throw new MarketInstallError('verification-failed', 'The verified package name is invalid.')
         }
-        await assertNotInstalled(profile, packageName)
+        const previousVersion = candidate.replaceExisting === true
+          ? await installedProfilePluginVersion(profile, packageName)
+          : undefined
+        if (candidate.replaceExisting !== true) await assertNotInstalled(profile, packageName)
+        if (previousVersion === verification.version) {
+          throw new MarketInstallError('already-installed', 'This plugin version is already installed in the active Profile.')
+        }
         if (this.candidates.get(candidate.key) !== candidate) {
           throw new MarketInstallError('not-available', 'The catalog source changed before installation.')
         }

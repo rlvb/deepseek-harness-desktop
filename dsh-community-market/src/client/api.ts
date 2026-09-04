@@ -147,15 +147,20 @@ export async function readMarketInternalPlugins(
   }))
 }
 
+export function issueMarketInternalInstallTicket(pluginId: string, signal?: AbortSignal): Promise<MarketInternalInstallTicketResponse>
+export function issueMarketInternalInstallTicket(pluginId: string, versionId: number, signal?: AbortSignal): Promise<MarketInternalInstallTicketResponse>
 export async function issueMarketInternalInstallTicket(
   pluginId: string,
+  versionOrSignal?: number | AbortSignal,
   signal?: AbortSignal,
 ): Promise<MarketInternalInstallTicketResponse> {
+  const versionId = typeof versionOrSignal === 'number' ? versionOrSignal : undefined
+  const requestSignal = typeof versionOrSignal === 'number' ? signal : versionOrSignal
   return await readJson(await fetch('/api/community-market/internal/install-ticket', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ pluginId }),
-    ...(signal === undefined ? {} : { signal }),
+    body: JSON.stringify(versionId === undefined ? { pluginId } : { pluginId, versionId }),
+    ...(requestSignal === undefined ? {} : { signal: requestSignal }),
   }))
 }
 
