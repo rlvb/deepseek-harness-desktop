@@ -14,7 +14,7 @@ import { applyDesktopSettings } from './desktop-settings.ts'
 import { applyEnterpriseBrand } from './enterprise-brand.tsx'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
-import { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
+import { applyExtendedShell } from './extended-shell.ts'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
 export { applyAdvancedShell } from './advanced-shell.ts'
@@ -103,7 +103,4 @@ export function apply(ctx: ClientContext): void {
   }
   if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
   if (environment.mode === 'extended') applyExtendedShell(ctx, environment, desktopSettings)
-  if (environment.platform !== 'linux' && environment.mode === 'compatibility') {
-    applyFramedShell(ctx, environment, desktopSettings)
-  }
 }

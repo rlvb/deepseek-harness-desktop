@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings'
+import type { SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { CatalogSourceManifest } from '../contracts/index.js'
 import { parseCatalogSnapshot, parseCatalogSource, validateLocalSourceRecords } from '../contracts/validate.js'
 import type { CatalogHttpClient } from '../contracts/types.js'
@@ -57,7 +57,7 @@ import { createMarketMediaService } from '../media/service.js'
 import { MarketInstallError, reviewedNpmPackageName, type MarketInstallService } from '../install/service.js'
 import { manualInstallHints } from '../install/manual.js'
 
-export const MARKET_SETTINGS_NAMESPACE = settingsNamespace('dsh-community-market')
+export const MARKET_SETTINGS_NAMESPACE = 'dsh-community-market'
 const SOURCE_SCHEMA = z.object({
   sourceRecordId: z.string().required(),
   registrationKind: z.union(['user-added', 'built-in'] as const).required(),
@@ -1424,7 +1424,6 @@ export function registerMarketRoutes(
           throw new Error('catalog source is not active')
         }
         const providerQuery = activeSource?.adapterId === DSHFIND_ADAPTER_ID
-          || (activeSource?.adapterId === DSH_MARKETPLACE_ADAPTER_ID && categories.length <= 1)
           || isDsh1024StoreAdapterId(activeSource?.adapterId)
         if (providerQuery) {
           let results: readonly MarketCatalogSourceResult[]
@@ -1655,7 +1654,6 @@ export function registerMarketRoutes(
             ...(cursors[0] === undefined ? {} : { cursor: cursors[0] }),
           }
           const providerQuery = activeSource.adapterId === DSHFIND_ADAPTER_ID
-            || (activeSource.adapterId === DSH_MARKETPLACE_ADAPTER_ID && categories.length <= 1)
             || isDsh1024StoreAdapterId(activeSource.adapterId)
           let results: readonly MarketCatalogSourceResult[]
           let metadata: MarketCatalogMetadata | undefined

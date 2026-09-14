@@ -33,9 +33,13 @@ const MAX_CANDIDATES = 10_000
 const MAX_PNPM_STREAM_OUTPUT_BYTES = 32 * 1024
 const MAX_FAILURE_CAUSE_LENGTH = 4 * 1024
 const MAX_INTERNAL_ARCHIVE_BYTES = 32 * 1024 * 1024
-const BLOCKED_PRODUCT_PACKAGES = new Set(['dsh-plugin-desktop', 'dsh-community-market'])
 const PROFILE_PATTERN = /^[A-Za-z0-9_-]+$/u
 const COMMAND_TOKEN_PATTERN = /^[A-Za-z0-9@:/._#+=-]+$/u
+const BLOCKED_PRODUCT_PACKAGES = new Set([
+  'dsh-plugin-desktop',
+  'dsh-plugin-desktop-beta',
+  'dsh-community-market',
+])
 
 export interface MarketDesktopProfile {
   readonly name: string
