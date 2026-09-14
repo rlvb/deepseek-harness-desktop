@@ -881,6 +881,26 @@ const css = `
   white-space: nowrap;
 }
 
+/*
+ * The upstream sidebar renders this list slot as display: contents. Keep
+ * every market entry in the sidebar footer as a vertical stack instead of
+ * letting the footer's default row flex layout place entries side by side.
+ */
+body [data-slot="sidebar.footer.action"] {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+body [data-slot="sidebar.footer.action"] > * {
+  flex: none;
+  min-width: 0;
+}
+
 .dshMarketLauncher[data-wide='false'] {
   width: 36px;
   height: 36px;
