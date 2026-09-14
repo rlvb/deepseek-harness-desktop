@@ -1615,6 +1615,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@deepseek-ai/dsh-client-connection@patch:@deepseek-ai/dsh-client-connection@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-connection-0.1.5-rc.2.tgz#./.yarn/patches/@deepseek-ai-dsh-client-connection-file-f50f956b9b.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.5-rc.2
+  resolution: "@deepseek-ai/dsh-client-connection@patch:@deepseek-ai/dsh-client-connection@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-connection-0.1.5-rc.2.tgz%23vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-connection-0.1.5-rc.2.tgz%3A%3Ahash=d271da&locator=deepseek-harness-desktop%2540workspace%253A.#./.yarn/patches/@deepseek-ai-dsh-client-connection-file-f50f956b9b.patch::version=0.1.5-rc.2&hash=14f9d6&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/dsh-credentials": "npm:^0.1.5-rc.2"
+    "@deepseek-ai/schemastery": "npm:^3.18.2"
+    zod: "npm:^4.4.3"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.2
+  checksum: 10c0/a83abe990b4a91dfa7c6497d1ccc8c3336122996e8acfcf220de88a8b3d60f5198c0a51d1f3bb982b623d989151221130d873a9743154df653e0a771519decad
+  languageName: node
+  linkType: hard
+
 "@deepseek-ai/dsh-client-file-upload@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-file-upload-0.1.5-rc.2.tgz::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.5-rc.2
   resolution: "@deepseek-ai/dsh-client-file-upload@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-file-upload-0.1.5-rc.2.tgz#vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-file-upload-0.1.5-rc.2.tgz::hash=7365b5&locator=deepseek-harness-desktop%40workspace%3A."

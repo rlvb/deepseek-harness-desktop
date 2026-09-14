@@ -1,0 +1,13 @@
+diff --git a/lib/index.js b/lib/index.js
+index d78f1ffe1421dea0ebdbb8d6377e3a475c8f43d1..b709727e10507bea5a249cdad1f675cb70fdfeff 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -733,7 +733,7 @@ function assertImageBodyCapacity(ctx, maxRequestBodyBytes) {
+ 	if (maxRequestBodyBytes < requiredImageBodyBytes) throw new Error(`client-connection maxRequestBodyBytes (${String(maxRequestBodyBytes)}) must be at least ${String(requiredImageBodyBytes)} for the configured aggregate image limit`);
+ }
+ /** Services required before providing Connection. */
+-const inject = ["credentials"];
++const inject = ["credentials", "webServer"];
+ const Config = z.object({
+ 	recovery: ConnectionRecoveryConfigSchema.default({}),
+ 	trustedHosts: z.array(String).default([]),
