@@ -760,8 +760,8 @@ describe('published package surface', () => {
   })
 
   it('fixes the installed application identity', () => {
-    expect(workspaceManifest.version).toBeUndefined()
-    expect(manifest.version).toBe('2.0.10')
+    expect(workspaceManifest.version).toBe('2.0.25')
+    expect(manifest.version).toBe('2.0.25')
     expect(manifest.build?.productName).toBe('DSH Desktop')
     expect(manifest.build?.appId).toBe('ai.deepseek.dsh.desktop')
     expect(manifest.build?.asar).toBe(false)
@@ -840,7 +840,7 @@ describe('published package surface', () => {
     expect(packageDir).toContain("'--config.win.signExecutable=false'")
     expect(manifest.scripts?.['dist:mac']).toBe('node scripts/release-mac.ts')
     expect(manifest.scripts?.['dist:mac-smoke']).toBe('node scripts/package-mac.ts')
-    expect(manifest.scripts?.['dist:win']).toBe('unrun scripts/run-package-win.ts')
+    expect(manifest.scripts?.['dist:win']).toBe('node scripts/package-win.ts')
     expect(manifest.scripts?.['dist:win-portable']).toBe('node scripts/package-win-portable.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn workspace dsh-community-market build')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run build')
