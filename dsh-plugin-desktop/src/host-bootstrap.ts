@@ -18,6 +18,7 @@ import { desktopInstallAnchor, type PreparedDesktopProfile } from './profile.ts'
 import { desktopLanBrowserUrls, desktopLoopbackBrowserUrl } from './desktop-network.ts'
 import { DESKTOP_LAN_HTTPS_CA_PATH, type DesktopLanHttpsRuntime } from './lan-https-runtime.ts'
 import type { DesktopBrowserAccess } from './desktop-browser-access.ts'
+import type { DesktopEmbeddedBrowser } from './desktop-embedded-browser.ts'
 import type { DesktopPnpmBootstrap } from './pnpm.ts'
 import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
@@ -48,6 +49,7 @@ export interface DesktopHostOptions {
 
 export async function bootDesktopHost(options: DesktopHostOptions, runtime: DesktopRuntime,
   browserAccess: DesktopBrowserAccess, lanHttps: DesktopLanHttpsRuntime,
+  embeddedBrowser: DesktopEmbeddedBrowser,
   bindHost: (host: DesktopStartupGenerationHost) => void, requestQuit: (code: number) => void,
 ): Promise<() => { aaRuntime: boolean; aaOnboarding: boolean }> {
   const { prepared, profilePreferences, homeDir, activeProfileName, pluginManagementStatePath,
@@ -108,6 +110,10 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
           'dsh-plugin-desktop: profile package resolution',
         )
         hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, desktopLaunchEnvironment)
+        // The isolated Host cannot construct BrowserWindow itself. The caller
+        // supplies either the local implementation (compatibility mode) or an
+        // RPC-backed capability owned by Electron's main process.
+        hostCtx.provide('desktopEmbeddedBrowser', embeddedBrowser)
         hostCtx.provide('desktopBrowserAccess', browserAccess)
         hostCtx.provide('desktopLanHttps', lanHttps)
         hostCtx.provide('desktopRuntime', runtime)

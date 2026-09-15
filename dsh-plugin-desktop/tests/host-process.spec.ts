@@ -2,14 +2,29 @@ import { EventEmitter } from 'node:events'
 import { expect, it, vi } from 'vitest'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import type { DesktopStartupGenerationHost } from '../src/startup-generation.ts'
-const state = vi.hoisted(() => ({ fork: vi.fn() }))
+const state = vi.hoisted(() => ({
+  fork: vi.fn(),
+  browserLogin: vi.fn(async () => ({
+    storage: { auth_token: 'fixture-token' }, userAgent: 'fixture-agent',
+    finalUrl: 'https://example.test/login', cookieHeader: '',
+  })),
+  browserDispose: vi.fn(),
+}))
 vi.mock('electron', () => ({ utilityProcess: { fork: state.fork } }))
+vi.mock('../src/desktop-embedded-browser.ts', () => ({
+  DesktopEmbeddedBrowserService: class {
+    login = state.browserLogin
+    dispose = state.browserDispose
+  },
+}))
 import { startIsolatedDesktopHost, type IsolatedHostOptions } from '../src/host-process.ts'
 
 function fixture() {
+  const messages: unknown[] = []
   const child = Object.assign(new EventEmitter(), {
     stdout: new EventEmitter(), stderr: new EventEmitter(),
     postMessage: vi.fn((message: { kind: string; id: number; method?: string }) => {
+      messages.push(message)
       if (message.kind === 'call') queueMicrotask(() => child.emit('message', { kind: 'result', id: message.id, value: { pid: 123 } }))
     }),
     kill: vi.fn(() => { queueMicrotask(() => child.emit('exit', 0)); return true }),
@@ -23,7 +38,7 @@ function fixture() {
     rendererToken: 'fixture', prepareCertificate: async () => ({ failureCode: 'fixture' }),
     bindHost: (value: DesktopStartupGenerationHost) => { host = value }, requestQuit() {}, onFailure,
   } as unknown as IsolatedHostOptions
-  return { child, options, onFailure, host: () => host }
+  return { child, messages, options, onFailure, host: () => host }
 }
 it('binds the child before startup and makes repeated teardown idempotent', async () => {
   const f = fixture()
@@ -40,4 +55,27 @@ it('reports unexpected Host exit without automatically relaunching or replaying 
   expect(f.onFailure).toHaveBeenCalledOnce()
   await f.host().fiber.dispose()
   expect(f.child.kill).not.toHaveBeenCalled()
+})
+it('bridges embedded browser login calls from the isolated Host', async () => {
+  state.browserLogin.mockClear()
+  state.browserDispose.mockClear()
+  const f = fixture()
+  await startIsolatedDesktopHost(f.options)
+  const options = {
+    url: 'https://example.test/login', allowedOrigins: ['https://example.test'],
+    storageKeys: ['auth_token'], title: 'fixture login',
+  }
+  f.child.emit('message', { kind: 'call', id: 44, method: 'desktop-embedded-browser-login', args: [options] })
+  await vi.waitFor(() => expect(state.browserLogin).toHaveBeenCalledWith(options))
+  await vi.waitFor(() => expect(f.messages.some(value => (
+    typeof value === 'object' && value !== null && (value as { id?: number }).id === 44
+  ))).toBe(true))
+  const response = f.messages.find(value => (
+    typeof value === 'object' && value !== null && (value as { id?: number }).id === 44
+  ))
+  expect(response).toMatchObject({
+    kind: 'result', id: 44, value: { storage: { auth_token: 'fixture-token' } },
+  })
+  await f.host().fiber.dispose()
+  expect(state.browserDispose).toHaveBeenCalled()
 })

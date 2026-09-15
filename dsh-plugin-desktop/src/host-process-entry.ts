@@ -4,6 +4,11 @@ import { HostRpc } from './host-rpc.ts'
 import { createHostRuntime, type RuntimeSnapshot } from './host-runtime-bridge.ts'
 import { bootDesktopHost, type DesktopHostOptions } from './host-bootstrap.ts'
 import { createDesktopBrowserAccess } from './desktop-browser-access.ts'
+import type {
+  DesktopEmbeddedBrowser,
+  DesktopEmbeddedBrowserLoginOptions,
+  DesktopEmbeddedBrowserLoginResult,
+} from './desktop-embedded-browser.ts'
 import { DesktopLanHttpsRuntime } from './lan-https-runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
 
@@ -35,12 +40,24 @@ rpc.handle('boot', async args => {
   starting = true
   const runtime = createHostRuntime(rpc, snapshot)
   const browser = createDesktopBrowserAccess(options.prepared.mode === 'compatibility' && options.prepared.openBrowser, token)
+  const embeddedBrowser: DesktopEmbeddedBrowser = Object.freeze({
+    login: (loginOptions: DesktopEmbeddedBrowserLoginOptions): Promise<DesktopEmbeddedBrowserLoginResult> => {
+      // The Electron-owned login window may remain open while the user scans
+      // and completes DingTalk OAuth; do not apply the normal short RPC timeout.
+      return rpc.call<DesktopEmbeddedBrowserLoginResult>(
+        'desktop-embedded-browser-login', [loginOptions], undefined, 0,
+      )
+    },
+    dispose: () => {
+      void rpc.call('desktop-embedded-browser-dispose', [], undefined, 0).catch(() => {})
+    },
+  })
   lan = new DesktopLanHttpsRuntime({
     addresses: options.prepared.lanAddresses, requestedPort: 0,
     prepareCertificate: () => rpc.call('certificate'),
   })
   inspectServices = await bootDesktopHost(options, runtime, browser, lan,
-    value => { host = value }, code => { void rpc.call('quit', [code]).catch(() => {}) })
+    embeddedBrowser, value => { host = value }, code => { void rpc.call('quit', [code]).catch(() => {}) })
   if (stopping) { await host?.fiber.dispose(); throw new Error('DSH Host stopped during startup') }
   await runtime.mountScheduled()
   return { pid: process.pid }

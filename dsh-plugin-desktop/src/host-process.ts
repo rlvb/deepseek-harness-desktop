@@ -4,6 +4,11 @@ import { utilityProcess } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { HostRpc } from './host-rpc.ts'
 import { bindNativeRuntime, runtimeSnapshot } from './host-runtime-bridge.ts'
+import { DesktopEmbeddedBrowserService } from './desktop-embedded-browser.ts'
+import type {
+  DesktopEmbeddedBrowserLoginOptions,
+  DesktopEmbeddedBrowserLoginResult,
+} from './desktop-embedded-browser.ts'
 import type { DesktopHostOptions } from './host-bootstrap.ts'
 import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
@@ -30,6 +35,17 @@ export async function startIsolatedDesktopHost(options: IsolatedHostOptions): Pr
     send: message => child.postMessage(message),
     listen: receive => { child.on('message', receive); return () => { child.removeListener('message', receive) } },
   }, 120_000)
+  // BrowserWindow is only available in Electron's main process. Keep the
+  // actual browser service here and expose only a bounded, typed RPC seam to
+  // the isolated Host process.
+  const embeddedBrowser = new DesktopEmbeddedBrowserService()
+  rpc.handle('desktop-embedded-browser-login', async args => {
+    const options = args[0] as DesktopEmbeddedBrowserLoginOptions
+    return embeddedBrowser.login(options) as Promise<DesktopEmbeddedBrowserLoginResult>
+  })
+  rpc.handle('desktop-embedded-browser-dispose', () => {
+    embeddedBrowser.dispose()
+  })
   const releaseNative = bindNativeRuntime(rpc, options.runtime)
   rpc.handle('certificate', () => options.prepareCertificate())
   rpc.handle('quit', ([code]) => { setImmediate(() => options.requestQuit(code)) })
@@ -40,6 +56,7 @@ export async function startIsolatedDesktopHost(options: IsolatedHostOptions): Pr
   const exit = new Promise<void>(resolve => { resolveExit = resolve })
   child.once('exit', (code) => {
     exited = true
+    embeddedBrowser.dispose()
     rpc.close(`DSH Host exited (${code})`)
     resolveExit()
     if (!stopping && booted) options.onFailure(new Error(`DSH Host exited (${code}); restart the application to reconnect`))
@@ -59,6 +76,7 @@ export async function startIsolatedDesktopHost(options: IsolatedHostOptions): Pr
       })
       await Promise.race([exit, timeoutExit])
     }
+    embeddedBrowser.dispose()
     await releaseNative()
     rpc.close()
   })()
