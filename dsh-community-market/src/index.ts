@@ -1,13 +1,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-storage-domain'
 import {
   registerMarketRoutes,
-  registerMarketSettings,
   type MarketDesktopPlugins,
   type MarketInternalCredentials,
   type MarketInternalCredentialsProvider,
 } from './host/routes.js'
+import { DeferredMarketStateStore } from './catalog/state-store.js'
 import { createRestrictedHttpClient } from './network/restricted-http.js'
 import {
   createMarketPackageVerifier,
@@ -17,14 +17,14 @@ import {
 } from './install/service.js'
 
 export const name = 'community-market'
-export const inject = ['webServer', 'settings']
+export const inject = ['webServer']
 
 interface DesktopProfilesCapability {
   readonly current: MarketDesktopProfile
 }
 
 interface DesktopActionsCapability {
-  openTerminal(): void
+  openTerminal?(): void
   requestRestart(): Promise<void>
 }
 
@@ -34,7 +34,9 @@ const npmRegistryHttp = createRestrictedHttpClient({
 })
 
 export function apply(ctx: Context): void {
-  const scope = registerMarketSettings(ctx)
+  // Routes keep one store for their whole lifetime. It switches to durable
+  // storage when the optional storage domain becomes available.
+  const state = new DeferredMarketStateStore(message => ctx.logger.warn(message))
   let installService: MarketInstallService | undefined
   let desktopActions: DesktopActionsCapability | undefined
   let desktopPlugins: MarketDesktopPlugins | undefined
@@ -46,7 +48,7 @@ export function apply(ctx: Context): void {
   ctx.effect(
     () => registerMarketRoutes(
       ctx,
-      scope,
+      state,
       installProvider,
       desktopActionsProvider,
       desktopPluginsProvider,
@@ -54,9 +56,24 @@ export function apply(ctx: Context): void {
     ),
     'community-market: routes',
   )
-  // dsh-sub2api is a first-party optional Host capability. Keeping the
-  // injection optional lets the public market remain usable in standalone
-  // Harness profiles while enabling the private 1024Store when present.
+  // Durable storage is optional; without it, the market remains usable for the
+  // current session. Import its implementation only when the capability exists.
+  ctx.inject(['storageDomain'], (storageCtx) => {
+    storageCtx.effect(async () => {
+      let close: (() => Promise<void>) | undefined
+      try {
+        const { activateMarketDurableState } = await import('./catalog/domain.js')
+        close = await activateMarketDurableState(storageCtx, state)
+      } catch (cause) {
+        ctx.logger.warn(`dsh-community-market: durable storage is unavailable; market state is session-only: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`)
+      }
+      return () => close?.()
+    }, 'community-market: durable state')
+  })
+  // The private internal catalog uses only the current Sub2API OpenAI group
+  // Key. Its capability is soft-injected so public market profiles still load.
   ctx.inject(['dshSub2ApiCredentials'], (credentialsCtx) => {
     const credentials = credentialsCtx.get('dshSub2ApiCredentials') as MarketInternalCredentials
     credentialsCtx.effect(() => {

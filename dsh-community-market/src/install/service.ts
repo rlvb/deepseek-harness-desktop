@@ -38,6 +38,7 @@ const COMMAND_TOKEN_PATTERN = /^[A-Za-z0-9@:/._#+=-]+$/u
 const BLOCKED_PRODUCT_PACKAGES = new Set([
   'dsh-plugin-desktop',
   'dsh-plugin-desktop-beta',
+  'dsh-desktop-next',
   'dsh-community-market',
 ])
 

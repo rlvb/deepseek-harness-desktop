@@ -194,6 +194,21 @@ describe('final Electron fuse verification', () => {
       ])
   })
 
+  it('resolves a directory-only build, whose dir target electron-builder never registers, to the host architecture', () => {
+    // electron-builder's Windows, Linux and macOS packagers skip DIR_TARGET in
+    // createTargets(), so `--dir` reaches afterAllArtifactBuild with an empty
+    // target map even though a configured target (nsis:x64) exists.
+    const platform = { buildConfigurationKey: 'win' }
+    const built = {
+      outDir: '/build',
+      configuration: { productName: 'DSH Desktop', win: { target: [{ target: 'nsis', arch: ['x64'] }] } },
+      platformToTargets: new Map([[platform, new Map()]]),
+    } satisfies ElectronArtifactBuildResult
+
+    expect(resolveFinalPackagedRuntimeContexts(built, () => true))
+      .toEqual([expect.objectContaining({ arch: Arch[process.arch as keyof typeof Arch] })])
+  })
+
   it('resolves mac universal from the target packager request and ignores component outputs', () => {
     const platform = { buildConfigurationKey: 'mac' }
     const requestedTargets = new Map([[platform, new Map([

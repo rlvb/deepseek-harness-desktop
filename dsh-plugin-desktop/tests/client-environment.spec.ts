@@ -15,6 +15,7 @@ import { installExtendedStyles } from '../src/client/extended-styles.ts'
 import {
   collapsedSidebarWidth, computeDesktopColumns, DesktopLayoutState, MACOS_SIDEBAR_COLLAPSED, SIDEBAR_COLLAPSED,
 } from '../src/client/layout-state.ts'
+import { installSidebarFooterStyles } from '../src/client/sidebar-footer-styles.ts'
 import { installDesktopOwnedStyles } from '../src/client/styles.ts'
 import { desktopWindowService, provideDesktopWindow } from '../src/client/window-service.ts'
 import {
@@ -37,6 +38,7 @@ describe('desktop client environment', () => {
     const inject = vi.fn()
     const ctx = {
       effect,
+      inject: vi.fn(),
       slots: { inject },
       locale: { bind: () => (key: string) => key },
       settingsScope: { bind: () => ({}) },
@@ -73,6 +75,8 @@ describe('desktop client environment', () => {
       .toEqual({ version: '2.0.3', mode: 'extended', platform: 'win32', material: 'mica', micaSupported: true })
     expect(parseDesktopClientEnvironment('?dsh-desktop-mode=extended&dsh-desktop-platform=win32&dsh-desktop-version=2.0.3&dsh-desktop-material=acrylic&dsh-desktop-mica=0'))
       .toEqual({ version: '2.0.3', mode: 'extended', platform: 'win32', material: 'off', micaSupported: false })
+    expect(parseDesktopClientEnvironment('?dsh-desktop-mode=compatibility&dsh-desktop-platform=linux&dsh-desktop-version=2.0.3&dsh-desktop-material=off'))
+      .toEqual({ version: '2.0.3', mode: 'compatibility', platform: 'linux', material: 'off', micaSupported: false })
   })
 
   it.each([
@@ -83,6 +87,8 @@ describe('desktop client environment', () => {
     ['?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin', 'dsh-desktop-material'],
     ['?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin&dsh-desktop-material=off', 'dsh-desktop-version'],
     ['?dsh-desktop-mode=advanced&dsh-desktop-platform=win32&dsh-desktop-version=2.0.3&dsh-desktop-material=mica&dsh-desktop-mica=0', 'incompatible'],
+    ['?dsh-desktop-mode=compatibility&dsh-desktop-platform=linux&dsh-desktop-version=2.0.3&dsh-desktop-material=mica', 'incompatible'],
+    ['?dsh-desktop-mode=compatibility&dsh-desktop-platform=linux&dsh-desktop-version=2.0.3&dsh-desktop-material=transparent', 'incompatible'],
   ])('fails loud for malformed marker %s', (search, field) => {
     expect(() => parseDesktopClientEnvironment(search)).toThrow(field)
   })
@@ -188,8 +194,6 @@ describe('advanced desktop layout', () => {
       const dispose = installDesktopOwnedStyles()
       expect(css).toMatch(/\.dshDesktopFrame \{[^}]*transition: grid-template-columns var\(--ds-transition-duration-slow\) var\(--ds-ease-in-out\);/)
       expect(css).toMatch(/\.dshDesktopFrame\[data-dragging\] \{ transition: none; \}/)
-      expect(css).toMatch(/\[data-slot="sidebar\.footer\.action"\] \{[^}]*display: flex !important;[^}]*flex-direction: column;[^}]*max-height: min\(40vh, 240px\);[^}]*overflow-y: auto;/)
-      expect(css).toMatch(/\[data-slot="sidebar\.footer\.action"\] > \* \{[^}]*flex: none;[^}]*min-width: 0;/)
       expect(css).toContain('min-height: 0; overflow: visible;')
       expect(css).toMatch(/\.dshDesktopResizeHandle \{[^}]*transition: left var\(--ds-transition-duration-slow\) var\(--ds-ease-in-out\);/)
       expect(css).toMatch(/\.dshDesktopFrame\[data-dragging\] \.dshDesktopResizeHandle \{ transition: none; \}/)
@@ -507,8 +511,6 @@ describe('independent Desktop frame', () => {
       expect(DESKTOP_FRAME_HEIGHT).toBe(36)
       expect(css).toMatch(/#root \{[^}]*position: fixed;[^}]*right: 0;[^}]*bottom: 0;[^}]*left: 0;[^}]*padding-top: 0;[^}]*transform: translateZ\(0\);/)
       expect(css).toMatch(/\[data-shell-overlay\] \{[^}]*overflow: hidden;[^}]*transform: translateZ\(0\);/)
-      expect(css).toMatch(/\[data-slot="sidebar\.footer\.action"\] \{[^}]*display: flex !important;[^}]*flex-direction: column;[^}]*max-height: min\(40vh, 240px\);[^}]*overflow-y: auto;/)
-      expect(css).toMatch(/\[data-slot="sidebar\.footer\.action"\] > \* \{[^}]*flex: none;[^}]*min-width: 0;/)
       expect(css).toMatch(/\[role="presentation"\]:has\(> \[aria-modal="true"\]\),[\s\S]*> \[aria-modal="true"\] \{[\s\S]*top: var\(--dsh-desktop-frame-height\) !important;/)
       expect(css).not.toContain('#root > :has(> [data-shell-overlay])')
       expect(css).toMatch(/body\[data-dsh-desktop-mode="extended"\] \.dshDesktopSidebarSurface \{[^}]*--dsw-specific-sidebar-fill: transparent;[^}]*border-right-color: transparent;[^}]*background: transparent !important;/)
@@ -676,6 +678,86 @@ describe('independent Desktop frame', () => {
       disposers.forEach(dispose => { dispose() })
       expect(dataset).toEqual({})
     } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('sidebar footer stacking', () => {
+  it.each(['compatibility', 'extended', 'advanced'])('owns the footer seat in %s mode', mode => {
+    vi.stubGlobal('window', { location: {
+      search: `?dsh-desktop-platform=darwin&dsh-desktop-mode=${mode}&dsh-desktop-version=2.0.3&dsh-desktop-material=off`,
+    } })
+    const effect = vi.fn()
+    const ctx = {
+      effect,
+      inject: vi.fn(),
+      on: vi.fn(() => () => {}),
+      reflect: { get: vi.fn(() => undefined), provide: vi.fn(() => () => {}) },
+      theme: { getTheme: vi.fn(() => ({ active: { colorScheme: 'dark', tokens: {} } })) },
+      slots: {
+        entries: vi.fn(() => []),
+        inject: vi.fn((_name: string, mount: () => unknown) => mount()),
+        provideRoot: vi.fn(() => () => {}),
+        register: vi.fn(() => () => {}),
+        subscribe: vi.fn(() => () => {}),
+      },
+      locale: { bind: () => (key: string) => key },
+      settingsScope: { bind: () => ({}) },
+    } as unknown as ClientContext
+
+    try {
+      apply(ctx)
+      expect(effect.mock.calls.map(([, label]) => label))
+        .toContain('dsh-plugin-desktop: sidebar footer stacking styles')
+    }
+    finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('stacks launchers in one bounded seat without shaving their rounded corners', () => {
+    let css = ''
+    const remove = vi.fn()
+    const style = {
+      dataset: {},
+      id: '',
+      get textContent() { return css },
+      set textContent(value: string) { css = value },
+      remove,
+    }
+    const appendChild = vi.fn()
+    vi.stubGlobal('document', {
+      getElementById: () => null,
+      createElement: () => style,
+      head: { appendChild },
+    })
+
+    try {
+      const dispose = installSidebarFooterStyles()
+      expect(css).toMatch(/body \[data-slot="sidebar\.footer\.action"\] \{[^}]*display: flex !important;[^}]*flex-direction: column;[^}]*max-height: min\(40vh, 240px\);[^}]*padding: 0 4px;[^}]*overflow-y: auto;/)
+      // Grow the anchor 4px per side and pay 4px back as padding: the content
+      // box keeps the slot's own width, so launchers that follow upstream's
+      // footer row convention (`.triggerRow`: `width: calc(100% + 4px);
+      // margin: 4px -2px`) land flush with the Settings row while the extra
+      // border-box width keeps the scroll container's clip edge off their
+      // rounded corners.
+      expect(css).toMatch(/body \[data-slot="sidebar\.footer\.action"\] \{[^}]*width: calc\(100% \+ 8px\);[^}]*margin-inline: -4px;/)
+      expect(css).toMatch(/body \[data-slot="sidebar\.footer\.action"\] > \* \{\s*flex: none;\s*min-width: 0;\s*\}/)
+      // Forcing a width on the children also hits the Tooltip bubbles React
+      // renders inside this anchor, stretching them to the viewport.
+      expect(css).not.toMatch(/> \* \{[^}]*\swidth:/)
+      // A reserved gutter shrank the seat asymmetrically; horizontal clipping
+      // sliced the corners off launchers that bleed past their content box.
+      expect(css).not.toContain('scrollbar-gutter')
+      expect(css).not.toContain('overflow-x: hidden')
+      // The seat must not depend on a mode marker: compatibility mode sets none.
+      expect(css).not.toContain('data-dsh-desktop-mode')
+      expect(appendChild).toHaveBeenCalledWith(style)
+      dispose()
+      expect(remove).toHaveBeenCalledOnce()
+    }
+    finally {
       vi.unstubAllGlobals()
     }
   })

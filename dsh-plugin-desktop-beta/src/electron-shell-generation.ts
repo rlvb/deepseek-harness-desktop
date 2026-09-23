@@ -16,6 +16,12 @@ import { formatDesktopExitCode } from './desktop-logger.ts'
 import { showDesktopMessageBox } from './desktop-dialog-window.ts'
 import { applicationNeedsReveal, revealApplication } from './electron-reveal.ts'
 import type { ElectronPlatformStrategy } from './electron-platform.ts'
+import {
+  desktopOpenWorkspaceScript,
+  type DesktopOpenWorkspaceDelivery,
+} from './launch-workspace-contract.ts'
+import { DESKTOP_RENDERER_ACTION_CHANNEL } from './renderer-actions-contract.ts'
+import { createDesktopRendererActionDispatcher } from './renderer-actions-dispatch.ts'
 import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
@@ -34,6 +40,14 @@ import {
 const MIN_ZOOM_LEVEL = -4
 const MAX_ZOOM_LEVEL = 4
 const WINDOW_STATE_WRITE_DELAY_MS = 250
+/**
+ * How long a forced renderer termination may take to report its exit before the
+ * reload proceeds without it. Windows writes a crash dump for the hung process
+ * first, which is slowest under the memory pressure that usually produced the
+ * hang, so this stays well above a prompt exit while leaving the recovery
+ * controller's 30s health budget room to observe the reload that follows.
+ */
+const REPLACEMENT_EXIT_TIMEOUT_MS = 10_000
 
 function pairedWebSocketOrigin(origin: string): string {
   const url = new URL(origin)
@@ -151,6 +165,15 @@ function installRendererAccessHeader(
   }
 }
 
+function sameOriginFrame(frameUrl: string | undefined, origin: string): boolean {
+  if (frameUrl === undefined) return false
+  try {
+    return new URL(frameUrl).origin === origin
+  } catch {
+    return false
+  }
+}
+
 function clampedZoomLevel(level: number): number {
   return Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, level))
 }
@@ -197,7 +220,7 @@ export class ElectronShellGeneration {
   private rendererRecoveryPending = false
   private readonly surfaceWatchdog: RendererSurfaceWatchdog
   private unresponsiveRenderer = false
-  private expectedRendererCrash = false
+  private replacementExit: ReturnType<typeof setTimeout> | undefined
   private recoveryContentLoaded = false
   private recoveryChromeLoaded = false
 
@@ -295,6 +318,22 @@ export class ElectronShellGeneration {
     const chrome = this.compatibilityShell?.chromeWebContents ?? window.webContents
     this.renderer = renderer
 
+    // Desktop-owned actions stay on the Electron lifetime. The page reaches the
+    // main process directly, so a Host generation that exited, hung, or never
+    // booted cannot take restart, terminal, or diagnostics down with it.
+    const dispatchRendererAction = createDesktopRendererActionDispatcher(
+      this.options.chromeActions,
+      message => { this.options.logError(message) },
+    )
+    renderer.ipc.handle(DESKTOP_RENDERER_ACTION_CHANNEL, async (event, action: unknown) => {
+      if (this.released || event.sender !== renderer
+        || event.senderFrame === null || event.senderFrame !== renderer.mainFrame
+        || !sameOriginFrame(event.senderFrame.url, origin)) {
+        throw new Error('dsh-plugin-desktop: untrusted Desktop action sender')
+      }
+      await dispatchRendererAction(action)
+    })
+
     let stateWriteTimer: ReturnType<typeof setTimeout> | undefined
     const persistWindowState = (): void => {
       if (stateWriteTimer !== undefined) {
@@ -332,6 +371,13 @@ export class ElectronShellGeneration {
       if (applicationNeedsReveal(window, platform.platform)) this.show()
     }
     const clearAttention = (): void => { this.clearAttention() }
+    // Closing the window must never strand the Host. Where the tray is
+    // guaranteed reachable the window hides; elsewhere it minimizes, which
+    // keeps every session running and leaves one reachable surface behind.
+    const dismissWindow = (): void => {
+      if (platform.hidesWindowOnClose) window.hide()
+      else window.minimize()
+    }
     let fullscreenExitPending = false
     let hideAfterFullscreenExit = false
     let restoreAfterFullscreenExit = false
@@ -345,7 +391,7 @@ export class ElectronShellGeneration {
       restoreAfterFullscreenExit = false
       if (window.isDestroyed()) return
       if (shouldHide) {
-        window.hide()
+        dismissWindow()
         return
       }
       if (shouldRestore) {
@@ -392,7 +438,7 @@ export class ElectronShellGeneration {
         window.setFullScreen(false)
         return
       }
-      window.hide()
+      dismissWindow()
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
     const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
@@ -433,8 +479,8 @@ export class ElectronShellGeneration {
     }
     const rendererGone = (_event: Electron.Event, details: Electron.RenderProcessGoneDetails): void => {
       this.surfaceWatchdog.reset()
-      if (this.expectedRendererCrash && (details.reason === 'crashed' || details.reason === 'killed')) {
-        this.expectedRendererCrash = false
+      if (this.replacementExit !== undefined && (details.reason === 'crashed' || details.reason === 'killed')) {
+        this.finishRendererReplacement(details)
         return
       }
       const detail = `renderer process gone (reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`
@@ -463,7 +509,7 @@ export class ElectronShellGeneration {
       }
     }
     const loaded = (): void => {
-      this.expectedRendererCrash = false
+      this.clearReplacementExit()
       this.recoveryContentLoaded = true
       if (this.recoveryChromeLoaded) this.rendererRecovery.loaded()
     }
@@ -537,6 +583,7 @@ export class ElectronShellGeneration {
       renderer.off('did-fail-load', loadFailed)
       renderer.off('did-start-loading', resetSurface)
       renderer.off('did-finish-load', loaded)
+      if (!renderer.isDestroyed()) renderer.ipc.removeHandler(DESKTOP_RENDERER_ACTION_CHANNEL)
       if (isolated) {
         chrome.off('before-input-event', handleZoomShortcut)
         chrome.off('render-process-gone', rendererGone)
@@ -634,10 +681,68 @@ export class ElectronShellGeneration {
     }
     if (this.unresponsiveRenderer) {
       this.unresponsiveRenderer = false
-      this.expectedRendererCrash = true
-      this.renderer!.forcefullyCrashRenderer()
+      if (this.beginRendererReplacement()) return
     }
     this.renderer?.reloadIgnoringCache()
+  }
+
+  /**
+   * Restore the interface from a native affordance that stays reachable while
+   * the renderer cannot draw anything. An exhausted recovery is restarted
+   * through its own controller so that a successful reload also clears the
+   * degraded state instead of leaving the fallback prompt armed forever.
+   */
+  requestRendererReload(): void {
+    if (this.rendererRecovery.exhausted) {
+      this.rendererRecovery.retry()
+      return
+    }
+    this.reloadRenderer()
+  }
+
+  /**
+   * Terminate a renderer that has stopped answering the main process, and
+   * reload only once its exit is confirmed.
+   *
+   * `forcefullyCrashRenderer()` returns before the process is gone, so a reload
+   * issued in the same turn is handed to a RenderFrameHost that is already
+   * being torn down, and Chromium cancels it along with the process. Driving
+   * the reload from `render-process-gone` instead lets Chromium spawn a fresh
+   * renderer, with a deadline covering an exit notification that never arrives.
+   *
+   * @returns whether the termination was issued and now owns the reload.
+   */
+  private beginRendererReplacement(): boolean {
+    const renderer = this.renderer
+    if (renderer === undefined || renderer.isDestroyed()) return false
+    this.clearReplacementExit()
+    this.replacementExit = setTimeout(() => {
+      this.replacementExit = undefined
+      this.options.logError('dsh-plugin-desktop: forced renderer termination reported no exit within the deadline; reloading anyway')
+      this.renderer?.reloadIgnoringCache()
+    }, REPLACEMENT_EXIT_TIMEOUT_MS)
+    this.replacementExit.unref()
+    // Name the deliberate termination in the log. Windows writes a crash dump
+    // for the hung process, and an unattributed dump cannot be told apart from
+    // a spontaneous renderer crash when the collected evidence is triaged.
+    this.options.logError('dsh-plugin-desktop: terminating unresponsive renderer; the crash dump it produces is deliberate')
+    renderer.forcefullyCrashRenderer()
+    return true
+  }
+
+  /** Consume the exit owed by a forced termination and start the real reload. */
+  private finishRendererReplacement(details: Electron.RenderProcessGoneDetails): void {
+    this.clearReplacementExit()
+    this.options.logError(
+      `dsh-plugin-desktop: unresponsive renderer replaced (reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`,
+    )
+    this.renderer?.reloadIgnoringCache()
+  }
+
+  private clearReplacementExit(): void {
+    if (this.replacementExit === undefined) return
+    clearTimeout(this.replacementExit)
+    this.replacementExit = undefined
   }
 
   /** Toggle Developer Tools for the active renderer. */
@@ -650,6 +755,23 @@ export class ElectronShellGeneration {
     if (renderer === undefined || renderer.isDestroyed()) return
     if (renderer.isDevToolsOpened()) renderer.closeDevTools()
     else renderer.openDevTools({ mode: 'detach', activate: true })
+  }
+
+  /**
+   * Hand one launch folder to the mounted Host page.
+   *
+   * The delivery script resolves immediately in both directions, so a page that
+   * has not yet installed the client seam parks the folder instead of keeping
+   * the main process waiting on a renderer promise.
+   * @param path - absolute folder already admitted by native policy.
+   * @returns how the page took the folder, or `'unavailable'` when no renderer
+   *   could take it.
+   */
+  async openWorkspacePath(path: string): Promise<DesktopOpenWorkspaceDelivery | 'unavailable'> {
+    const renderer = this.renderer
+    if (this.released || renderer === undefined || renderer.isDestroyed()) return 'unavailable'
+    const delivery: unknown = await renderer.executeJavaScript(desktopOpenWorkspaceScript(path))
+    return delivery === 'delivered' || delivery === 'pending' ? delivery : 'unavailable'
   }
 
   notifyAttention(notification: DesktopNotification): void {
@@ -700,6 +822,7 @@ export class ElectronShellGeneration {
   async release(): Promise<void> {
     if (this.released) return
     this.released = true
+    this.clearReplacementExit()
     this.surfaceWatchdog.stop()
     this.rendererRecovery.stop()
     this.options.stopRendererBootMonitoring()

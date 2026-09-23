@@ -34,6 +34,19 @@ import type {
 const BIN_NAME = 'dsh-plugin-desktop'
 const DESKTOP_NAMESPACE = 'dsh-desktop'
 const NOTIFICATIONS_NAMESPACE = 'dsh-desktop-notifications'
+const AGENT_PRESETS_NAMESPACE = 'agent-presets'
+/**
+ * Where a persisted global preset default can live. 0.1.6 and earlier wrote the
+ * user's choice to `agent-presets.default`; 0.1.7 moved it to
+ * `agent-preset-registry.selectedDefault`, and beta's launcher renames the former
+ * into the latter before this migration runs, so both locations must be checked.
+ */
+const AGENT_PRESET_DEFAULT_LOCATIONS: readonly (readonly [namespace: string, field: string])[] = Object.freeze([
+  Object.freeze([AGENT_PRESETS_NAMESPACE, 'default'] as const),
+  Object.freeze(['agent-preset-registry', 'selectedDefault'] as const),
+])
+const LEGACY_AGENT_PRESET = 'code'
+const CURRENT_AGENT_PRESET = 'ptc'
 const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
 const DOCUMENT_FILE_MODE = 0o600
 const DOCUMENT_DIRECTORY_MODE = 0o700
@@ -446,6 +459,50 @@ export async function migrateDesktopWindowMaterialSettings(
     const root = structuredClone(loaded.root)
     const desktop = { ...section(root, DESKTOP_NAMESPACE), windowsMaterial: 'off' }
     root[DESKTOP_NAMESPACE] = desktop
+    output = `${JSON.stringify(root, undefined, 2)}\n`
+  }
+  await writeFileAtomic(path, output, {
+    mode: DOCUMENT_FILE_MODE,
+    dirMode: DOCUMENT_DIRECTORY_MODE,
+  })
+  return true
+}
+
+/**
+ * Replace the released `code` preset default with its current `ptc` id.
+ * Session persistence migrates the same historical id, but the global
+ * setting is read before a new Session exists and therefore needs its own
+ * pre-Host migration. Both the 0.1.6 `agent-presets.default` key and the
+ * 0.1.7 `agent-preset-registry.selectedDefault` key it is renamed to are
+ * checked, because beta renames the section before this runs. Unknown values
+ * remain untouched so user-authored presets keep failing visibly instead of
+ * being silently replaced.
+ */
+export async function migrateLegacyAgentPresetSettings(
+  documentPath: string,
+): Promise<boolean> {
+  const path = settingsPath(documentPath)
+  const legacyLocations = (loaded: LoadedSettingsDocument) => AGENT_PRESET_DEFAULT_LOCATIONS
+    .filter(([namespace, field]) => section(loaded.root, namespace)[field] === LEGACY_AGENT_PRESET)
+
+  if (legacyLocations(loadSettingsDocument(path)).length === 0) return false
+
+  ensureDocumentDirectory(path)
+  const loaded = loadSettingsDocument(path)
+  const locations = legacyLocations(loaded)
+  if (locations.length === 0) return false
+
+  let output: string
+  if (loaded.format === 'yaml') {
+    for (const [namespace, field] of locations) {
+      loaded.yaml!.setIn([namespace, field], CURRENT_AGENT_PRESET)
+    }
+    output = loaded.yaml!.toString()
+  } else {
+    const root = structuredClone(loaded.root)
+    for (const [namespace, field] of locations) {
+      root[namespace] = { ...section(root, namespace), [field]: CURRENT_AGENT_PRESET }
+    }
     output = `${JSON.stringify(root, undefined, 2)}\n`
   }
   await writeFileAtomic(path, output, {

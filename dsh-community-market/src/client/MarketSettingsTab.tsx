@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
-  IconCheckOutline16,
-  IconChevronDownOutline14,
-  IconChevronUpOutline14,
-  IconCordisPluginOutline14,
-  IconDataOutline16,
-  IconDownloadOutline16,
-  IconGlobeOutline14,
-  IconPlusOutline16,
-  IconRefreshOutline16,
-  IconRightUpOutline16,
-  IconSearchOutline16,
-  IconSettingsOutline16,
-  IconTrashOutline16,
+  IconCheckOutlineRegular,
+  IconChevronDownOutlineRegular,
+  IconChevronUpOutlineRegular,
+  IconCordisPluginOutlineRegular,
+  IconDataOutlineRegular,
+  IconDownloadOutlineRegular,
+  IconGlobeOutlineRegular,
+  IconPlusOutlineRegular,
+  IconRefreshOutlineRegular,
+  IconRightUpOutlineRegular,
+  IconSearchOutlineRegular,
+  IconSettingsOutlineRegular,
+  IconTrashOutlineRegular,
   Input,
   Modal,
   Pill,
@@ -177,7 +177,7 @@ function PluginIcon({ item, large = false }: { item: MarketItem; large?: boolean
   const icon = item.media?.icon
   return (
     <div className={large ? 'dshMarketGlyph dshMarketGlyphLarge' : 'dshMarketGlyph'}>
-      <IconCordisPluginOutline14 size={large ? 28 : 20} />
+      <IconCordisPluginOutlineRegular size={large ? 28 : 20} />
       {icon !== undefined && (
         <img
           src={marketMediaAssetUrl(icon.assetRef)}
@@ -1090,19 +1090,19 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       <div className="dshMarketViewBar">
         <div className="dshMarketViewSwitch" role="group" aria-label={t('title')}>
           <Pill active={view === 'discover'} aria-pressed={view === 'discover'} onClick={() => selectMarketView('discover')}>
-            <IconDataOutline16 size={14} /><span>{t('discover')}</span>
+            <IconDataOutlineRegular size={14} /><span>{t('discover')}</span>
           </Pill>
           <Pill active={view === 'installable'} aria-pressed={view === 'installable'} onClick={() => selectMarketView('installable')}>
-            <IconDownloadOutline16 size={14} /><span>{t('installable')}</span>
+            <IconDownloadOutlineRegular size={14} /><span>{t('installable')}</span>
           </Pill>
           <Pill active={view === 'installed'} aria-pressed={view === 'installed'} onClick={() => selectMarketView('installed')}>
-            <IconCheckOutline16 size={14} /><span>{t('installed')}</span>
+            <IconCheckOutlineRegular size={14} /><span>{t('installed')}</span>
           </Pill>
           <Pill active={view === 'internal'} aria-pressed={view === 'internal'} onClick={() => selectMarketView('internal')}>
-            <IconCordisPluginOutline14 size={14} /><span>{t('internalPlugins')}</span>
+            <IconCordisPluginOutlineRegular size={14} /><span>{t('internalPlugins')}</span>
           </Pill>
           <Pill active={view === 'sources'} aria-pressed={view === 'sources'} onClick={() => selectMarketView('sources')}>
-            <IconSettingsOutline16 size={14} /><span>{t('sources')}</span>
+            <IconSettingsOutlineRegular size={14} /><span>{t('sources')}</span>
           </Pill>
         </div>
         <Pill className="dshMarketCurrentSource">
@@ -1114,7 +1114,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
               ? `${t('currentSource')}: ${currentSource.name}`
               : (
                 <a href={currentSourceHref} target="_blank" rel="noopener noreferrer">
-                  {t('currentSource')}: {currentSource.name} <IconRightUpOutline16 size={12} />
+                  {t('currentSource')}: {currentSource.name} <IconRightUpOutlineRegular size={12} />
                 </a>
               )}
         </Pill>
@@ -1310,7 +1310,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
           <Button variant="ghost" disabled={mutationPending} onClick={() => setAddOpen(false)}>{t('cancel')}</Button>
           <Button
             variant="primary"
-            icon={<IconPlusOutline16 />}
+            icon={<IconPlusOutlineRegular />}
             disabled={mutationPending || !manifestUrl.trim()}
             onClick={() => {
               void mutate({ action: 'add-standard', manifestUrl: manifestUrl.trim() }).then(succeeded => {
@@ -1372,14 +1372,14 @@ function InternalPluginsView(props: {
       <StateDot state="error" size={14} />
       <h2>{props.t('internalUnavailableTitle')}</h2>
       <p>{props.error}</p>
-      <Button variant="outline" icon={<IconRefreshOutline16 />} onClick={props.onRetry}>{props.t('retry')}</Button>
+      <Button variant="outline" icon={<IconRefreshOutlineRegular />} onClick={props.onRetry}>{props.t('retry')}</Button>
     </div>
   )
   const plugins = props.index?.plugins ?? []
   return (
     <div className="dshMarketContent dshMarketInternalContent">
       <div className="dshMarketInternalBanner">
-        <div className="dshMarketInternalBannerIcon"><IconCordisPluginOutline14 size={18} /></div>
+        <div className="dshMarketInternalBannerIcon"><IconCordisPluginOutlineRegular size={18} /></div>
         <div>
           <strong>{props.t('internalAccessTitle')}</strong>
           <p>{props.t('internalAccessBody')}</p>
@@ -1390,18 +1390,18 @@ function InternalPluginsView(props: {
       </div>
       <div className="dshMarketSectionHead">
         <div><h2>{props.t('internalPlugins')}</h2><p>{props.t('internalPluginsBody')}</p></div>
-        <Button variant="outline" size="sm" disabled={props.loading || props.ticketPending} icon={<IconRefreshOutline16 />} onClick={props.onRefresh}>{props.t('refresh')}</Button>
+        <Button variant="outline" size="sm" disabled={props.loading || props.ticketPending} icon={<IconRefreshOutlineRegular />} onClick={props.onRefresh}>{props.t('refresh')}</Button>
       </div>
       <form className="dshMarketToolbar" onSubmit={event => { event.preventDefault(); props.onSearch() }}>
         <Input
           className="dshMarketSearch"
-          icon={<IconSearchOutline16 />}
+          icon={<IconSearchOutlineRegular />}
           value={props.query}
           disabled={props.loading || props.ticketPending}
           placeholder={props.t('internalSearch')}
           onChange={event => props.onQuery(event.currentTarget.value)}
         />
-        <Button type="submit" variant="primary" disabled={props.loading || props.ticketPending} icon={<IconSearchOutline16 />}>{props.t('searchAction')}</Button>
+        <Button type="submit" variant="primary" disabled={props.loading || props.ticketPending} icon={<IconSearchOutlineRegular />}>{props.t('searchAction')}</Button>
         <Pill>{props.index?.total ?? plugins.length}</Pill>
       </form>
       {props.error !== undefined && <div className="dshMarketBanner" role="alert"><StateDot state="error" />{props.error}</div>}
@@ -1412,7 +1412,7 @@ function InternalPluginsView(props: {
           {plugins.map(plugin => (
             <article className="dshMarketInternalCard" key={plugin.id}>
               <div className="dshMarketCardTop">
-                <div className="dshMarketInternalGlyph"><IconCordisPluginOutline14 size={22} /></div>
+                <div className="dshMarketInternalGlyph"><IconCordisPluginOutlineRegular size={22} /></div>
                 <div className="dshMarketCardName"><strong>{plugin.name}</strong><span>{plugin.id}</span></div>
               </div>
               <p className="dshMarketSummary">{chinese ? plugin.description.zh : plugin.description.en}</p>
@@ -1489,7 +1489,7 @@ function InternalProjectModal({ plugin, locale, pending, loading, error, onClose
         <Button variant="ghost" disabled={pending} onClick={onClose}>{t('close')}</Button>
         <Button
           variant="primary"
-          icon={<IconDownloadOutline16 />}
+          icon={<IconDownloadOutlineRegular />}
           disabled={pending}
           onClick={() => onInstall(selectedVersionId)}
         >{pending ? t('installing') : (versions.length > 1 ? t('internalInstallVersion') : t('internalOneClickInstall'))}</Button>
@@ -1497,7 +1497,7 @@ function InternalProjectModal({ plugin, locale, pending, loading, error, onClose
     >
       <div className="dshMarketDetails dshMarketInternalProject">
         <div className="dshMarketDetailsIntro">
-          <div className="dshMarketInternalGlyph"><IconCordisPluginOutline14 size={28} /></div>
+          <div className="dshMarketInternalGlyph"><IconCordisPluginOutlineRegular size={28} /></div>
           {loading ? <p>{t('loading')}</p> : plugin.readme !== undefined ? (
             <pre className="dshMarketInternalReadme">{plugin.readme}</pre>
           ) : <p>{description}</p>}
@@ -1552,10 +1552,10 @@ function DiscoverView(props: {
   const noSources = props.state !== undefined && !props.state.sources.some(source => source.enabled)
   if (noSources) return (
     <div className="dshMarketEmpty">
-      <div className="dshMarketEmptyIcon"><IconGlobeOutline14 size={24} /></div>
+      <div className="dshMarketEmptyIcon"><IconGlobeOutlineRegular size={24} /></div>
       <h2>{props.t('emptyTitle')}</h2>
       <p>{props.t('emptyBody')}</p>
-      <Button variant="primary" icon={<IconSettingsOutline16 />} onClick={props.onSources}>{props.t('chooseSources')}</Button>
+      <Button variant="primary" icon={<IconSettingsOutlineRegular />} onClick={props.onSources}>{props.t('chooseSources')}</Button>
     </div>
   )
   return (
@@ -1573,13 +1573,13 @@ function DiscoverView(props: {
       <form className="dshMarketToolbar" onSubmit={event => { event.preventDefault(); props.onSearch() }}>
         <Input
           className="dshMarketSearch"
-          icon={<IconSearchOutline16 />}
+          icon={<IconSearchOutlineRegular />}
           value={props.query}
           disabled={props.mutationPending}
           placeholder={props.t('search')}
           onChange={event => props.onQuery(event.currentTarget.value)}
         />
-        <Button type="submit" variant="primary" disabled={props.mutationPending} icon={<IconSearchOutline16 />}>{props.t('searchAction')}</Button>
+        <Button type="submit" variant="primary" disabled={props.mutationPending} icon={<IconSearchOutlineRegular />}>{props.t('searchAction')}</Button>
         <Tooltip label={props.t('refresh')}>
           <Button
             type="button"
@@ -1587,7 +1587,7 @@ function DiscoverView(props: {
             variant="toolbar"
             aria-label={props.t('refresh')}
             disabled={props.loading || props.loadingMore || props.mutationPending}
-            icon={<IconRefreshOutline16 />}
+            icon={<IconRefreshOutlineRegular />}
             onClick={props.onRefresh}
           />
         </Tooltip>
@@ -1612,7 +1612,7 @@ function DiscoverView(props: {
         <div className="dshMarketEmpty" role="alert">
           <StateDot state="error" size={14} />
           <h2>{props.t('catalogError')}</h2><p>{props.error}</p>
-          <Button variant="outline" icon={<IconRefreshOutline16 />} onClick={props.onRefresh}>{props.t('retry')}</Button>
+          <Button variant="outline" icon={<IconRefreshOutlineRegular />} onClick={props.onRefresh}>{props.t('retry')}</Button>
         </div>
       )}
       {props.error === undefined && props.loading && props.items.length === 0 && (
@@ -1669,10 +1669,10 @@ function InstallableView(props: {
   const noSources = props.state !== undefined && !props.state.sources.some(source => source.enabled)
   if (noSources) return (
     <div className="dshMarketEmpty">
-      <div className="dshMarketEmptyIcon"><IconGlobeOutline14 size={24} /></div>
+      <div className="dshMarketEmptyIcon"><IconGlobeOutlineRegular size={24} /></div>
       <h2>{props.t('emptyTitle')}</h2>
       <p>{props.t('emptyBody')}</p>
-      <Button variant="primary" icon={<IconSettingsOutline16 />} onClick={props.onSources}>{props.t('chooseSources')}</Button>
+      <Button variant="primary" icon={<IconSettingsOutlineRegular />} onClick={props.onSources}>{props.t('chooseSources')}</Button>
     </div>
   )
   if (props.unavailable) return (
@@ -1689,7 +1689,7 @@ function InstallableView(props: {
     <div className="dshMarketEmpty" role="alert">
       <StateDot state="error" size={14} />
       <h2>{props.t('installableError')}</h2>
-      <Button variant="outline" icon={<IconRefreshOutline16 />} onClick={props.onRetry}>{props.t('retry')}</Button>
+      <Button variant="outline" icon={<IconRefreshOutlineRegular />} onClick={props.onRetry}>{props.t('retry')}</Button>
     </div>
   )
   if (!props.loaded) return (
@@ -1703,7 +1703,7 @@ function InstallableView(props: {
           variant="outline"
           size="sm"
           disabled={props.loading || props.operationPending}
-          icon={<IconRefreshOutline16 />}
+          icon={<IconRefreshOutlineRegular />}
           onClick={props.onRefresh}
         >{props.t('rescanInstallable')}</Button>
       </div>
@@ -1719,7 +1719,7 @@ function InstallableView(props: {
       <form className="dshMarketToolbar" onSubmit={event => { event.preventDefault(); props.onSearch() }}>
         <Input
           className="dshMarketSearch"
-          icon={<IconSearchOutline16 />}
+          icon={<IconSearchOutlineRegular />}
           value={props.query}
           disabled={props.operationPending}
           placeholder={props.t('search')}
@@ -1729,7 +1729,7 @@ function InstallableView(props: {
           type="submit"
           variant="primary"
           disabled={props.operationPending}
-          icon={<IconSearchOutline16 />}
+          icon={<IconSearchOutlineRegular />}
         >{props.t('searchAction')}</Button>
         <Pill>{props.totalItems}</Pill>
       </form>
@@ -1807,7 +1807,7 @@ function InstalledView(props: {
     <div className="dshMarketEmpty" role="alert">
       <StateDot state="error" size={14} />
       <h2>{props.t('installationsError')}</h2>
-      <Button variant="outline" icon={<IconRefreshOutline16 />} onClick={props.onRetry}>{props.t('retry')}</Button>
+      <Button variant="outline" icon={<IconRefreshOutlineRegular />} onClick={props.onRetry}>{props.t('retry')}</Button>
     </div>
   )
   return (
@@ -1818,7 +1818,7 @@ function InstalledView(props: {
           variant="outline"
           size="sm"
           disabled={props.loading || props.operationPending}
-          icon={<IconRefreshOutline16 />}
+          icon={<IconRefreshOutlineRegular />}
           onClick={props.onRetry}
         >{props.t('refresh')}</Button>
       </div>
@@ -1871,7 +1871,7 @@ function InstallationCard(props: {
           size="sm"
           aria-label={`${props.t('uninstall')}: ${displayName}`}
           disabled={props.operationPending}
-          icon={<IconTrashOutline16 />}
+          icon={<IconTrashOutlineRegular />}
           onClick={() => props.onUninstall(installation.bundleId)}
         >{props.t('uninstall')}</Button>}
       </div>
@@ -1965,7 +1965,7 @@ function ItemSourceRow({ source, t }: {
             rel="noopener noreferrer"
             aria-label={`${t('source')}: ${label}`}
           >
-            {label} <IconRightUpOutline16 size={12} />
+            {label} <IconRightUpOutlineRegular size={12} />
           </a>
         )}
     </div>
@@ -1988,10 +1988,10 @@ function SourcesView({ state, catalog, error, pending, adapterGuideHref, onMutat
     <div className="dshMarketContent">
       <div className="dshMarketSectionHead">
         <div><h2>{t('sources')}</h2><p>{t('sourceNotice')}</p></div>
-        <Button variant="outline" disabled={pending} icon={<IconPlusOutline16 />} onClick={onAddStandard}>{t('addStandard')}</Button>
+        <Button variant="outline" disabled={pending} icon={<IconPlusOutlineRegular />} onClick={onAddStandard}>{t('addStandard')}</Button>
       </div>
       <div className="dshMarketBanner dshMarketSourceGuide">
-        <IconGlobeOutline14 size={14} />
+        <IconGlobeOutlineRegular size={14} />
         <span>
           {t('sourcePartnershipBefore')}
           <a href={DSH_DESKTOP_ISSUES_URL} target="_blank" rel="noopener noreferrer">{t('sourcePartnershipContact')}</a>
@@ -2085,7 +2085,7 @@ function SourceRow({ source, result, pending, canMoveUp, canMoveDown, onMoveUp, 
             size="sm"
             aria-label={t('moveUp')}
             disabled={pending || !canMoveUp}
-            icon={<IconChevronUpOutline14 />}
+            icon={<IconChevronUpOutlineRegular size={14} />}
             onClick={onMoveUp}
           />
         </Tooltip>
@@ -2096,7 +2096,7 @@ function SourceRow({ source, result, pending, canMoveUp, canMoveDown, onMoveUp, 
             size="sm"
             aria-label={t('moveDown')}
             disabled={pending || !canMoveDown}
-            icon={<IconChevronDownOutline14 />}
+            icon={<IconChevronDownOutlineRegular size={14} />}
             onClick={onMoveDown}
           />
         </Tooltip>
@@ -2106,7 +2106,7 @@ function SourceRow({ source, result, pending, canMoveUp, canMoveDown, onMoveUp, 
           role="radio"
           aria-checked={source.enabled}
           disabled={pending}
-          icon={source.enabled ? <IconCheckOutline16 /> : undefined}
+          icon={source.enabled ? <IconCheckOutlineRegular /> : undefined}
           onClick={onSelect}
         >{source.enabled ? t('selectedSource') : t('selectSource')}</Button>
         <Tooltip label={t('remove')}>
@@ -2116,7 +2116,7 @@ function SourceRow({ source, result, pending, canMoveUp, canMoveDown, onMoveUp, 
             size="sm"
             aria-label={t('remove')}
             disabled={pending}
-            icon={<IconTrashOutline16 />}
+            icon={<IconTrashOutlineRegular />}
             onClick={onRemove}
           />
         </Tooltip>
@@ -2138,7 +2138,7 @@ function AvailableSource({ provider, pending, onAdd, t }: {
         <p>{provider.description}</p>
         <SourceAttribution attribution={provider.attribution} />
       </div>
-      <Button variant="outline" size="sm" disabled={pending} icon={<IconPlusOutline16 />} onClick={onAdd}>{t('add')}</Button>
+      <Button variant="outline" size="sm" disabled={pending} icon={<IconPlusOutlineRegular />} onClick={onAdd}>{t('add')}</Button>
     </div>
   )
 }
@@ -2195,7 +2195,7 @@ function OperationConfirmModal({ preview, pending, error, onCancel, onConfirm, t
         <Button
           variant="primary"
           disabled={pending}
-          icon={installing ? <IconDownloadOutline16 /> : <IconTrashOutline16 />}
+          icon={installing ? <IconDownloadOutlineRegular /> : <IconTrashOutlineRegular />}
           onClick={onConfirm}
         >{confirmLabel}</Button>
       </div>}
@@ -2247,7 +2247,7 @@ function OperationSuccessModal({ operation, canRestart, pending, error, onClose,
         <Button
           variant="primary"
           disabled={!canRestart || pending}
-          icon={<IconRefreshOutline16 />}
+          icon={<IconRefreshOutlineRegular />}
           onClick={onRestart}
         >{pending ? t('restarting') : t('restartNow')}</Button>
       </div>}
@@ -2325,14 +2325,14 @@ function ItemActionModal({
     <Button
       variant="primary"
       disabled={pending}
-      icon={<IconDownloadOutline16 />}
+      icon={<IconDownloadOutlineRegular />}
       onClick={onConfirm}
     >{pending ? t('installing') : t('confirmInstall')}</Button>
   </> : <>
     {marketProjectUrl(value) !== undefined ? (
       <Button
         variant="outline"
-        icon={<IconRightUpOutline16 size={12} />}
+        icon={<IconRightUpOutlineRegular size={12} />}
         onClick={() => {
           const href = marketProjectUrl(value)
           if (href !== undefined) window.open(href, '_blank', 'noopener,noreferrer')
@@ -2341,7 +2341,7 @@ function ItemActionModal({
     ) : value.item.repository !== undefined && (
       <Button
         variant="outline"
-        icon={<IconRightUpOutline16 size={12} />}
+        icon={<IconRightUpOutlineRegular size={12} />}
         onClick={() => window.open(value.item.repository!.url, '_blank', 'noopener,noreferrer')}
       >{t('repository')}</Button>
     )}
@@ -2449,7 +2449,7 @@ function ItemActionModal({
                 <StateDot state="warning" />
                 <span>{operationError}</span>
                 <a href={verificationHelpHref} target="_blank" rel="noopener noreferrer">
-                  {t('verificationDetails')} <IconRightUpOutline16 size={12} />
+                  {t('verificationDetails')} <IconRightUpOutlineRegular size={12} />
                 </a>
               </div>
             )}

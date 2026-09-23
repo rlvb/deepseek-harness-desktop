@@ -9,6 +9,14 @@ export type MacUniversalArch = 'arm64' | 'x86_64'
 export const MACOS_UNIVERSAL_NATIVE_ENTRIES = [
   {
     arch: 'arm64',
+    path: 'node_modules/@dataiku/uv-darwin-arm64/bin/uv',
+  },
+  {
+    arch: 'x86_64',
+    path: 'node_modules/@dataiku/uv-darwin-x64/bin/uv',
+  },
+  {
+    arch: 'arm64',
     path: 'node_modules/@deepseek-ai/node-addon-system-darwin-arm64/bin/system.node',
   },
   {
@@ -33,7 +41,7 @@ export const MACOS_UNIVERSAL_NATIVE_ENTRIES = [
   },
   {
     arch: 'arm64',
-    path: 'node_modules/fs-ext/prebuilds/darwin-arm64/electron.abi148.node',
+    path: 'node_modules/fs-ext/prebuilds/darwin-arm64/electron.abi149.node',
   },
   {
     arch: 'arm64',
@@ -65,7 +73,7 @@ export const MACOS_UNIVERSAL_NATIVE_ENTRIES = [
   },
   {
     arch: 'x86_64',
-    path: 'node_modules/fs-ext/prebuilds/darwin-x64/electron.abi148.node',
+    path: 'node_modules/fs-ext/prebuilds/darwin-x64/electron.abi149.node',
   },
   {
     arch: 'x86_64',
@@ -90,13 +98,15 @@ export const FORBIDDEN_MACOS_UNIVERSAL_ENTRIES = [
 
 /** Injectable filesystem seam for source-runtime preparation. */
 export interface MacUniversalPreparationOptions {
+  /** Override only when a shell does not depend on part of the legacy native inventory. */
+  readonly nativeEntries?: readonly { readonly arch: MacUniversalArch; readonly path: string }[]
   readonly desktopRoot: string
   readonly exists: (path: string) => boolean
   readonly chmod: (path: string, mode: number) => void
 }
 
 /**
- * Validate both CPU runtime trees and restore node-pty helper execute bits.
+ * Validate both CPU runtime trees and restore node-pty and uv execute bits.
  * Yarn intentionally disables lifecycle scripts, so the package step owns this
  * deterministic permission repair for both architectures.
  * @param options - Desktop root and injectable filesystem operations.
@@ -105,7 +115,8 @@ export function prepareMacUniversalRuntime(
   options: MacUniversalPreparationOptions,
 ): void {
   const root = resolve(options.desktopRoot)
-  const missing = MACOS_UNIVERSAL_NATIVE_ENTRIES
+  const entries = options.nativeEntries ?? MACOS_UNIVERSAL_NATIVE_ENTRIES
+  const missing = entries
     .map(entry => join(root, entry.path))
     .filter(path => !options.exists(path))
   if (missing.length > 0) {
@@ -114,8 +125,8 @@ export function prepareMacUniversalRuntime(
     )
   }
 
-  for (const entry of MACOS_UNIVERSAL_NATIVE_ENTRIES) {
-    if (entry.path.endsWith('/spawn-helper')) {
+  for (const entry of entries) {
+    if (entry.path.endsWith('/spawn-helper') || entry.path.endsWith('/bin/uv')) {
       options.chmod(join(root, entry.path), 0o755)
     }
   }

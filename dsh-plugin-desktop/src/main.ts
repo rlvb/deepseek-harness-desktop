@@ -1,10 +1,17 @@
 /** DSH Desktop executable: minimal Electron bootstrap around the Host Cordis root. */
 
+// Tool subprocesses start the private Node runner through this Electron binary,
+// so that runner child needs ELECTRON_RUN_AS_NODE. Exporting it from this
+// process would also reach every Chromium child — renderer, GPU, network
+// service, and the utility hosts — and each of them would start as Node and die
+// before it could launch. The dsh-subprocess-local patch scopes the flag to the
+// runner child alone.
+
 import { startIsolatedDesktopHost } from './host-process.ts'
 import { app, crashReporter, safeStorage, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   boot,
@@ -15,7 +22,6 @@ import {
   type FailLoudProcess,
 } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
-import { defaultDshHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import {
   DSH_LAUNCH_ENVIRONMENT_KEY,
   type LaunchEnvironmentSnapshot,
@@ -35,6 +41,7 @@ import { desktopProductVersion, ElectronDesktopRuntime } from './electron-runtim
 import { DesktopEmbeddedBrowserService } from './desktop-embedded-browser.ts'
 import { getOrCreateDesktopInstallationId } from './desktop-installation-id.ts'
 import {
+  describeDesktopChildProcess,
   ElectronStderrLogger,
   installDesktopChildProcessLogging,
   installDesktopUncaughtExceptionLogging,
@@ -53,7 +60,8 @@ import type {
   DesktopLifecycleRendererFailureReason,
 } from './lifecycle-events.ts'
 import { FileExporter } from './file-exporter.ts'
-import { DESKTOP_SETTINGS_NAMESPACE, type DesktopSettings } from './index.ts'
+import { installAgentErrorLogging } from './agent-error-logging.ts'
+import { observeDesktopPreferenceSettings } from './settings-bridge.ts'
 import {
   desktopLanBrowserUrls,
   desktopLoopbackBrowserUrl,
@@ -135,6 +143,7 @@ import {
 import {
   migrateDesktopBrowserAccessSettings,
   migrateDesktopWindowMaterialSettings,
+  migrateLegacyAgentPresetSettings,
   readDesktopSetupWizardSettings,
   updateDesktopSetupWizardSettings,
   type DesktopSetupWizardSettings,
@@ -175,9 +184,9 @@ import type { RendererBootReport } from './renderer-boot-contract.ts'
 import { desktopLocaleFromLanguageTag, desktopTrayLabel } from './tray-locale.ts'
 import { desktopNativeCopy } from './native-dialog-copy.ts'
 import {
-  DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
-  type DesktopNotificationSettings,
-} from './notifications.ts'
+  desktopLaunchWorkspaceRequest,
+  type DesktopLaunchWorkspaceRequest,
+} from './launch-workspace-path.ts'
 import {
   desktopDefaultRelaunchArguments,
   desktopRecoveryModeRequested,
@@ -204,7 +213,12 @@ import {
   DESKTOP_PACKAGE_NAME,
   DESKTOP_PRODUCT_NAME,
   DESKTOP_RELEASE_CHANNEL,
+  OTHER_DESKTOP_PRODUCT_IDENTITY,
 } from './product-identity.ts'
+import {
+  desktopSharedHomeNoticeRequired,
+  resolveDesktopChannelHome,
+} from './desktop-channel-home.ts'
 import { desktopRecoveryCopy } from './recovery-copy.ts'
 
 const BIN_NAME = DESKTOP_PACKAGE_NAME
@@ -395,7 +409,17 @@ async function start(): Promise<void> {
   let removeShutdownRequests: (() => void) | undefined
   let removeUncaughtExceptionLogging: (() => void) | undefined
   let removeChildProcessLogging: (() => void) | undefined
+  // Electron reports a Host exit as a bare code with no reason. The most recent
+  // Chromium child failure is the only thing that can say who else went down
+  // with it, so keep it for the Host exit record.
+  let lastChildProcessGone: string | undefined
   let fileExporter: FileExporter | undefined
+  // A folder named by this launch waits here until the Host page is mounted.
+  // No background-Node guard applies to the first instance: a development run
+  // legitimately looks like one, and a first instance is by definition a real
+  // launch rather than a descendant command re-entering the executable.
+  let pendingLaunchWorkspacePath = desktopLaunchWorkspaceRequest(process.argv)?.path
+  let launchWorkspaceReady = false
   let runtime!: ElectronDesktopRuntime
   let logSink: LogFileSink | undefined
   let startupRecoveryController: DesktopStartupRecoveryController | undefined
@@ -489,7 +513,9 @@ async function start(): Promise<void> {
   } catch (cause) {
     electronLogger.error(`${BIN_NAME}: active run tracking unavailable: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
-  removeChildProcessLogging = installDesktopChildProcessLogging(app, electronLogger)
+  removeChildProcessLogging = installDesktopChildProcessLogging(app, electronLogger, details => {
+    lastChildProcessGone = describeDesktopChildProcess(details)
+  })
   const nativeExit = createDesktopExitCoordinator(
     {
       prepareToQuit: () => { runtime.prepareToQuit() },
@@ -619,6 +645,31 @@ async function start(): Promise<void> {
     }
     return false
   }
+  /** Apply native policy to one launch folder and hand it to the Host page. */
+  const openLaunchWorkspace = async (path: string): Promise<void> => {
+    try {
+      if (!await runtime.admitWorkspacePath(path)) return
+      const delivery = await runtime.openWorkspacePath(path)
+      if (delivery === 'unavailable') {
+        electronLogger.error(`${BIN_NAME}: no renderer could accept the launch workspace: ${path}`)
+      }
+    } catch (cause) {
+      electronLogger.error(
+        `${BIN_NAME}: failed to open the launch workspace: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    }
+  }
+
+  /** Take one launch folder, deferring it until the Host page can accept it. */
+  const acceptLaunchWorkspace = (request: DesktopLaunchWorkspaceRequest | undefined): void => {
+    if (request === undefined) return
+    if (!launchWorkspaceReady) {
+      pendingLaunchWorkspacePath = request.path
+      return
+    }
+    void openLaunchWorkspace(request.path)
+  }
+
   app.on('activate', () => { showPreHostSurface() })
   if (process.platform === 'darwin') app.on('did-become-active', () => { showPreHostSurface() })
   app.on('second-instance', (_event, argv) => {
@@ -626,10 +677,15 @@ async function start(): Promise<void> {
       requestQuit(0)
       return
     }
+    const launchWorkspace = desktopLaunchWorkspaceRequest(argv)
     if (isDesktopBackgroundNodeRequest(argv)) {
-      return
+      // A descendant Node command re-entered as a GUI process. Only the
+      // launcher's own flag tells a workspace hand-off apart from whatever
+      // paths that command happens to carry on its own command line.
+      if (launchWorkspace?.explicit !== true) return
     }
     if (!showPreHostSurface()) runtime.show()
+    acceptLaunchWorkspace(launchWorkspace)
   })
   try {
     await app.whenReady()
@@ -687,9 +743,10 @@ async function start(): Promise<void> {
     })
     const dshBootstrapPath = fileURLToPath(new URL('./desktop-cli.js', import.meta.url))
     const releasePnpmRuntime = generation.own(() => { pnpmRuntime.dispose() })
-    const fallbackHome = resolveDshHome()
-    const defaultHome = resolve(defaultDshHome())
-    const fallbackSource = process.env.DSH_HOME === undefined ? 'default' : 'environment'
+    const channelHomeResolution = resolveDesktopChannelHome()
+    const fallbackHome = channelHomeResolution.homeDir
+    const defaultHome = channelHomeResolution.channelHome
+    const fallbackSource = channelHomeResolution.status === 'explicit' ? 'environment' : 'default'
     let dataDirectoryLocation: DesktopDataDirectoryLocation | undefined
     let homeDir: string
     if (safeModePaths !== undefined) {
@@ -850,6 +907,71 @@ async function start(): Promise<void> {
     }
     if (!recoveryModeRequested) {
       const copy = desktopNativeCopy(locale)
+      // Both releases used to share one DSH home, and with it the installation
+      // module index that each core generation rewrites. Offer the move once per
+      // launch; nothing is copied, so the shared directory keeps working as is.
+      if (dataDirectoryLocation !== undefined
+        && desktopSharedHomeNoticeRequired(channelHomeResolution, dataDirectoryLocation.source)) {
+        const sharedLocation = dataDirectoryLocation
+        const otherProductName = OTHER_DESKTOP_PRODUCT_IDENTITY.productName
+        const result = await showDesktopDialog({
+          type: 'warning',
+          title: copy.sharedDataDirectoryTitle,
+          message: copy.sharedDataDirectoryMessage(PRODUCT_NAME, otherProductName),
+          detail: copy.sharedDataDirectoryDetail(
+            sharedLocation.homeDir,
+            channelHomeResolution.channelHome,
+          ),
+          advisory: copy.sharedDataDirectoryWarning(
+            otherProductName,
+            join(sharedLocation.homeDir, 'sessions'),
+          ),
+          presentation: 'profile-compatibility',
+          buttons: [copy.useChannelDataDirectory, copy.shareDataDirectoryAnyway, copy.quit],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        if (result.response === 2) {
+          await shutdown.request(0)
+          return
+        }
+        if (result.response === 0) {
+          let moved = false
+          const lease = acquireDesktopDataOperationLock(
+            desktopUserDataDir,
+            'move Desktop onto its release-channel data directory',
+          )
+          try {
+            await selectDesktopDataDirectory(
+              desktopUserDataDir,
+              sharedLocation,
+              channelHomeResolution.channelHome,
+              { createIfMissing: true },
+            )
+            moved = true
+          } catch (cause) {
+            electronLogger.error(
+              `${BIN_NAME}: could not select the release-channel data directory: `
+                + `${cause instanceof Error ? cause.message : String(cause)}`,
+            )
+          } finally {
+            lease.release()
+          }
+          if (moved) {
+            nativeExit.requestRelaunch()
+            await shutdown.request(0)
+            return
+          }
+          await showDesktopDialog({
+            type: 'error',
+            title: copy.sharedDataDirectoryTitle,
+            message: copy.sharedDataDirectoryFailed,
+            buttons: [copy.ok],
+            defaultId: 0,
+            cancelId: 0,
+          })
+        }
+      }
       while (true) {
         const admission = inspectDesktopProfileChannelAdmission(
           releaseUserDataLocations,
@@ -1122,6 +1244,30 @@ async function start(): Promise<void> {
       marketSelection,
       preparationHooks,
     )
+    let legacyPresetMigrated = false
+    if (safeModePaths === undefined) {
+      try {
+        legacyPresetMigrated = await migrateLegacyAgentPresetSettings(prepared.settingsDocument)
+      } catch (cause) {
+        // A Profile whose settings document cannot be rewritten keeps the
+        // broken default it already had. Throwing here would trade that one
+        // failing preset id for the recovery window on every launch.
+        electronLogger.error(
+          `${BIN_NAME}: failed to persist legacy agent preset migration: ${cause instanceof Error ? cause.message : String(cause)}`,
+        )
+      }
+    }
+    if (legacyPresetMigrated) {
+      prepared = prepareDesktopProfile(
+        process.env.DSH_TELEMETRY_DISABLED,
+        homeDir,
+        process.platform,
+        activeProfileName,
+        pluginManagementStatePath,
+        marketSelection,
+        preparationHooks,
+      )
+    }
     if (safeModePaths !== undefined) {
       const safeModeDefaults = DESKTOP_SAFE_MODE_DEFAULTS
       await updateDesktopSetupWizardSettings(prepared.settingsDocument, safeModeDefaults.settings)
@@ -1413,9 +1559,18 @@ async function start(): Promise<void> {
         runtime, rendererToken: browserAccess.rendererHeader.value,
         prepareCertificate: prepareHostCertificate,
         bindHost: host => generation.bindHost(host), requestQuit,
-        onFailure: error => {
+        onFailure: (error, exit) => {
           electronLogger.error(error.message)
+          lifecycleRecorder.recordHostExit({
+            exitCode: exit.exitCode,
+            expected: false,
+            uptimeMs: exit.uptimeMs,
+            ...(lastChildProcessGone === undefined ? {} : { childProcessGone: lastChildProcessGone }),
+          })
           runtime.notifyAttention({ title: PRODUCT_NAME, body: error.message })
+          // A dialog that cannot open must not turn a dead Host into a dead app.
+          void runtime.showHostStoppedRecovery({ exitCode: exit.exitCode })
+            .catch((cause: unknown) => { electronLogger.errorCause(cause) })
         },
       })
     } else {
@@ -1502,6 +1657,8 @@ async function start(): Promise<void> {
             fileExporter = new FileExporter(logSink)
             hostCtx.logger.exporter(fileExporter)
           }
+          // Registered before the plugin tree mounts, so no agent can fail unrecorded.
+          installAgentErrorLogging(hostCtx)
           await hostCtx.plugin(DesktopProfileService, {
             current: {
               name: activeProfileName,
@@ -1624,29 +1781,7 @@ async function start(): Promise<void> {
         throw cause
       })
       generation.bindHost(ctx)
-      fileExporter?.setThreshold((ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings | undefined)?.logLevel ?? 'info')
-      ctx.on('settings/updated', (namespace, next) => {
-        if (namespace === DESKTOP_SETTINGS_NAMESPACE) {
-          fileExporter?.setThreshold((next as DesktopSettings).logLevel)
-        }
-        if (namespace !== DESKTOP_SETTINGS_NAMESPACE
-          && namespace !== DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE) return
-        const write = enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
-          namespace === DESKTOP_SETTINGS_NAMESPACE
-            ? next as DesktopSettings
-            : ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings,
-          namespace === DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE
-            ? next as DesktopNotificationSettings
-            : ctx.settings.get(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE) as DesktopNotificationSettings,
-          current.market,
-          current.aaEnabled === true,
-        ))
-        void write.catch((cause: unknown) => {
-          ctx.logger.error(
-            `${BIN_NAME}: failed to capture active Profile settings: ${cause instanceof Error ? cause.message : String(cause)}`,
-          )
-        })
-      })
+      observeDesktopPreferenceSettings(ctx, fileExporter, enqueueProfilePreferencesWrite)
     }
     startupStage = 'renderer-startup'
     lifecycleRecorder.transitionStartupStage(startupStage)
@@ -1677,6 +1812,13 @@ async function start(): Promise<void> {
       )
     }
     lifecycleRecorder.completeStartup(startupStage, rendererReport)
+    // Only a renderer that reached a healthy boot can take a workspace, so the
+    // hand-off is released here rather than beside the mount: a startup that
+    // ended in the recovery route must not also try to open a folder.
+    launchWorkspaceReady = true
+    const requestedWorkspacePath = pendingLaunchWorkspacePath
+    pendingLaunchWorkspacePath = undefined
+    if (requestedWorkspacePath !== undefined) void openLaunchWorkspace(requestedWorkspacePath)
     notifySkippedOptionalEntries(runtime, electronLogger, prepared.skippedOptionalEntries)
     notifyWindowsVolumeConcerns(runtime, electronLogger, windowsVolumeConcerns)
     if (safeModePaths !== undefined && DESKTOP_SAFE_MODE_DEFAULTS.settings.notifications.enabled) {

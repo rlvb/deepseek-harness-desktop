@@ -171,7 +171,7 @@ describe('final Electron fuse verification', () => {
     expect(() => resolveFinalPackagedRuntimeContexts(
       result([{ key: 'win', archs: [Arch.x64, Arch.arm64] }]),
       filename => filename === x64Executable,
-    )).toThrow('win/arm64 at /build/win-arm64-unpacked/DSH Desktop Beta.exe')
+    )).toThrow(`win/arm64 at ${join('/build', 'win-arm64-unpacked', 'DSH Desktop Beta.exe')}`)
   })
 
   it('resolves a real target-name map through the target archs retained by NSIS', () => {
@@ -192,6 +192,21 @@ describe('final Electron fuse verification', () => {
         expect.objectContaining({ appOutDir: join('/build', 'win-arm64-unpacked'), arch: Arch.arm64 }),
         expect.objectContaining({ appOutDir: join('/build', 'win-unpacked'), arch: Arch.x64 }),
       ])
+  })
+
+  it('resolves a directory-only build, whose dir target electron-builder never registers, to the host architecture', () => {
+    // electron-builder's Windows, Linux and macOS packagers skip DIR_TARGET in
+    // createTargets(), so `--dir` reaches afterAllArtifactBuild with an empty
+    // target map even though a configured target (nsis:x64) exists.
+    const platform = { buildConfigurationKey: 'win' }
+    const built = {
+      outDir: '/build',
+      configuration: { productName: 'DSH Desktop Beta', win: { target: [{ target: 'nsis', arch: ['x64'] }] } },
+      platformToTargets: new Map([[platform, new Map()]]),
+    } satisfies ElectronArtifactBuildResult
+
+    expect(resolveFinalPackagedRuntimeContexts(built, () => true))
+      .toEqual([expect.objectContaining({ arch: Arch[process.arch as keyof typeof Arch] })])
   })
 
   it('resolves mac universal from the target packager request and ignores component outputs', () => {
