@@ -6,8 +6,8 @@ import {
   type DesktopInstallationId,
 } from './desktop-installation-id.ts'
 
-/** Enterprise static endpoint returning the latest stable DSH Desktop version. */
-export const DESKTOP_VERSION_ENDPOINT = 'https://api.8outlets.com:9443/guide/dsh-desktop/version.json'
+/** Canonical enterprise endpoint returning the latest stable DSH Desktop version. */
+export const DESKTOP_VERSION_ENDPOINT = 'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/version.json'
 
 /** Header carrying the installed Desktop version to the fixed version endpoint. */
 export const DESKTOP_CURRENT_VERSION_HEADER = 'X-DSH-Desktop-Version'

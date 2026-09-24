@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
+  Input,
+  Modal,
+  Pill,
+  StateDot,
+  Tooltip,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import {
   IconCheckOutlineRegular,
   IconChevronDownOutlineRegular,
   IconChevronUpOutlineRegular,
@@ -14,12 +21,7 @@ import {
   IconSearchOutlineRegular,
   IconSettingsOutlineRegular,
   IconTrashOutlineRegular,
-  Input,
-  Modal,
-  Pill,
-  StateDot,
-  Tooltip,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+} from './primitive-icons.js'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { CatalogSnapshot } from '../contracts/generated/catalog-snapshot.js'
 import type {

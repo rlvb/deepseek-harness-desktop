@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import {
   Button,
-  IconCloseOutlineRegular,
   Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import { MarketSurface, type MarketView } from './MarketSettingsTab.js'
 import type { createMarketViewStore } from './market-view-store.js'
+import { IconCloseOutlineRegular } from './primitive-icons.js'
 
 export type MarketOverlayProps = PropsRuntime<'shell.overlay'>
   & PropsStore<ReturnType<typeof createMarketViewStore>>

@@ -24,10 +24,34 @@ if (registration?.id !== 'dsh-community-market' || typeof registration.factory !
 }
 
 const requestedModules = new Set()
+const legacyPrimitiveIconNames = [
+  'IconCheckOutline14',
+  'IconCheckOutline16',
+  'IconChevronDownOutline14',
+  'IconChevronUpOutline14',
+  'IconCloseOutline16',
+  'IconCordisPluginOutline14',
+  'IconDataOutline16',
+  'IconDownloadOutline16',
+  'IconGlobeOutline14',
+  'IconPlusOutline16',
+  'IconRefreshOutline14',
+  'IconRefreshOutline16',
+  'IconRightUpOutline14',
+  'IconRightUpOutline16',
+  'IconSearchOutline16',
+  'IconSettingsOutline14',
+  'IconSettingsOutline16',
+  'IconTrashOutline16',
+]
+const legacyPrimitives = Object.fromEntries(legacyPrimitiveIconNames.map(name => [name, () => null]))
 registration.factory((specifier) => {
   requestedModules.add(specifier)
-  return {}
+  return specifier === '@deepseek-ai/dsh-client-ui-primitives' ? legacyPrimitives : {}
 })
+if (!requestedModules.has('@deepseek-ai/dsh-client-ui-primitives')) {
+  throw new Error('market client did not request the shared UI primitives package')
+}
 if (!requestedModules.has('@deepseek-ai/dsh-client-store')) {
   throw new Error('market client bundled a private store engine instead of using the alpha platform module')
 }

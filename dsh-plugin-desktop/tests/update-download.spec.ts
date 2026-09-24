@@ -121,7 +121,11 @@ describe('desktop update installer download', () => {
       destinationPath: destinationPath(directory, 'win32', '2.2.0'),
       request: async (url) => {
         expect(url).toBe(DESKTOP_DOWNLOAD_URLS.win32)
-        return chunkedResponse([artifact], {}, 'https://www.dshdesktop.cn/api/downloads/windows')
+        return chunkedResponse(
+          [artifact],
+          {},
+          'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/windows.exe',
+        )
       },
     })
 
@@ -152,6 +156,8 @@ describe('desktop update installer download', () => {
     ['a look-alike suffix', 'https://evil-modelscope.cn/installer.dmg'],
     ['another user uploads path on the mirror host', 'https://modelscope.cn/models/attacker/deepseek-harness-desktop/resolve/master/installer.dmg'],
     ['an unreviewed mirror subdomain', 'https://cdn.modelscope.cn/installer.dmg'],
+    ['an unapproved path on the enterprise update host', 'https://tokenapi.chinabeego.com:9443/private/installer.dmg'],
+    ['an unapproved port on the enterprise update host', 'https://tokenapi.chinabeego.com:9444/guide/dsh-desktop/windows.exe'],
     ['a missing final URL', ''],
   ] as const)('rejects a download that settles on %s', async (_label, finalUrl) => {
     const directory = await temporaryDirectory()

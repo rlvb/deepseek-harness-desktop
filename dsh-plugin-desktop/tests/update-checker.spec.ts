@@ -61,6 +61,11 @@ describe('strict SemVer parsing', () => {
 })
 
 describe('public Desktop version check', () => {
+  it('uses the canonical HTTPS endpoint instead of the redirecting alias', () => {
+    expect(DESKTOP_VERSION_ENDPOINT)
+      .toBe('https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/version.json')
+  })
+
   it('uses only the fixed no-cache version endpoint and reports a newer stable version', async () => {
     const controller = new AbortController()
     const calls: Array<{ url: string, init: RequestInit }> = []

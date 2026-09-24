@@ -17,8 +17,8 @@ export type DesktopDownloadPlatform = 'darwin' | 'win32'
 
 /** Fixed enterprise download endpoints that record one user-confirmed installer download. */
 export const DESKTOP_DOWNLOAD_URLS: Readonly<Record<DesktopDownloadPlatform, string>> = {
-  darwin: 'https://api.8outlets.com:9443/guide/dsh-desktop/mac.dmg',
-  win32: 'https://api.8outlets.com:9443/guide/dsh-desktop/windows.exe',
+  darwin: 'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/mac.dmg',
+  win32: 'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/windows.exe',
 }
 
 /** Header pinning a download request and response to the checked release. */
@@ -65,9 +65,11 @@ export type UpdateArtifactRequest = (url: string, init: RequestInit) => Promise<
 const ALLOWED_DOWNLOAD_TARGETS: readonly {
   readonly host: string
   readonly pathPrefix?: string
+  readonly port?: string
 }[] = [
   { host: 'www.dshdesktop.cn' },
   { host: 'dshdesktop.cn' },
+  { host: 'tokenapi.chinabeego.com', port: '9443', pathPrefix: '/guide/dsh-desktop/' },
   { host: 'modelscope.cn', pathPrefix: '/models/t4wefan/deepseek-harness-desktop/' },
 ]
 
@@ -471,12 +473,13 @@ export function assertAllowedDownloadOrigin(finalUrl: string): void {
   } catch {
     throw new UpdateDownloadError('redirect-origin', 'The update download transport reported no usable final URL.')
   }
-  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port && parsed.port !== '443') {
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
     throw new UpdateDownloadError('redirect-origin', 'The update download must settle on HTTPS.')
   }
   const host = parsed.hostname.toLowerCase()
   const allowed = ALLOWED_DOWNLOAD_TARGETS.some(target =>
     host === target.host
+    && parsed.port === (target.port ?? '')
     && (target.pathPrefix === undefined || parsed.pathname.startsWith(target.pathPrefix)),
   )
   if (!allowed) {

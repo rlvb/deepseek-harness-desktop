@@ -55,6 +55,46 @@ body [data-slot="sidebar.footer.action"] > * {
   flex: none;
   min-width: 0;
 }
+body .dshDesktopUpdateLauncher {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: calc(100% + 4px);
+  height: 42px;
+  margin: 4px -2px;
+  padding: 0 10px 0 8px;
+  gap: 8px;
+  justify-content: flex-start;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+body .dshDesktopUpdateLauncher:hover:not(:disabled) {
+  background: rgba(128, 128, 128, 0.1);
+}
+body .dshDesktopUpdateLauncher:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+body .dshDesktopUpdateLauncher:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+body .dshDesktopUpdateLauncher[data-wide='false'] {
+  width: 36px;
+  height: 36px;
+  margin: 8px auto 10px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
 `
 
 /** Install the footer stacking sheet once; tolerate headless Client boot. */

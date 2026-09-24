@@ -666,6 +666,7 @@ describe('Desktop settings Slot registration', () => {
     expect(bind).toHaveBeenNthCalledWith(2, { namespace: DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE })
     expect(inject).toHaveBeenCalledWith('settings.section', expect.any(Function))
     expect(inject).toHaveBeenCalledWith('settings.action', expect.any(Function))
+    expect(inject).toHaveBeenCalledWith('sidebar.footer.action', expect.any(Function))
     const [options, component] = register.mock.calls[0] as unknown as [
       { id: string; order: number; locale: string; label: () => string; inject: () => Record<string, unknown> },
       unknown,
@@ -697,6 +698,19 @@ describe('Desktop settings Slot registration', () => {
     })
     expect(actionOptions.inject()).toHaveProperty('api')
     expect(actionComponent).toBe(DesktopTerminalSettingsAction)
+    const [updateOptions, updateComponent] = register.mock.calls[2] as unknown as [
+      { id: string; order: number; locale: string; label: () => string; inject: () => Record<string, unknown> },
+      unknown,
+    ]
+    expect(updateOptions).toMatchObject({
+      name: 'sidebar.footer.action',
+      id: 'desktop-update',
+      order: 12,
+      locale: DESKTOP_SETTINGS_LOCALE_NAMESPACE,
+    })
+    expect(updateOptions.label()).toBe(`${DESKTOP_SETTINGS_LOCALE_NAMESPACE}:updateAction`)
+    expect(updateOptions.inject()).toHaveProperty('api')
+    expect(updateComponent).toBeTypeOf('function')
     await control.setMode('extended')
     expect(scope.set).toHaveBeenCalledWith('mode', 'extended')
   })
