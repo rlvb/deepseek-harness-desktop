@@ -1417,6 +1417,53 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-agent-loop-0.1.5-rc.2.tgz#./patches/dsh-agent-loop-empty-tool-guard.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.5-rc.2
+  resolution: "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-agent-loop-0.1.5-rc.2.tgz%23vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-agent-loop-0.1.5-rc.2.tgz%3A%3Ahash=b24fc3&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-agent-loop-empty-tool-guard.patch::version=0.1.5-rc.2&hash=4c58a7&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/dsh-brand": "npm:^0.1.5-rc.2"
+    "@deepseek-ai/dsh-util-values": "npm:^0.1.5-rc.2"
+    "@deepseek-ai/schemastery": "npm:^3.18.2"
+    zod: "npm:^4.4.3"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.2
+    "@deepseek-ai/dsh-agent": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-invariants": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-llm": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-scope": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-session": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-session-persistence": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-session-projection": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-settings": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-system-prompt": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-tools": ^0.1.5-rc.2
+  checksum: 10c0/6118d8a2e62d811b23be43be44accd21225ac4826f682d03ab43ac2ad47d7220be4dda31a4428959cdaba3fcf8d76d40e2d7f3a9df3816b1bb4184068441ba47
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-loop-0.1.7-alpha.2.tgz#./patches/dsh-agent-loop-empty-tool-guard.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.7-alpha.2
+  resolution: "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-loop-0.1.7-alpha.2.tgz%23vendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-loop-0.1.7-alpha.2.tgz%3A%3Ahash=3d2079&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-agent-loop-empty-tool-guard.patch::version=0.1.7-alpha.2&hash=4c58a7&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/dsh-brand": "npm:0.1.7-alpha.2"
+    "@deepseek-ai/dsh-util-values": "npm:0.1.7-alpha.2"
+    "@deepseek-ai/schemastery": "npm:~3.18.4"
+    zod: "npm:^4.4.3"
+  peerDependencies:
+    "@deepseek-ai/cordis": ~4.0.4
+    "@deepseek-ai/dsh-agent": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-invariants": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-llm": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-scope": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-session": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-session-persistence": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-session-projection": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-system-prompt": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-tools": 0.1.7-alpha.2
+  checksum: 10c0/f97701995ee3e3e7c05f6ed4a26b9f0f7fbff8117f783fc40299a3ca89e71e4ac7bcab2527ee4e71d790d40adcfb75ef7c501b250eec9abdcb9ec6c6510b5a1d
+  languageName: node
+  linkType: hard
+
 "@deepseek-ai/dsh-agent-preset-registry@file:vendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-preset-registry-0.1.7-alpha.2.tgz::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.7-alpha.2
   resolution: "@deepseek-ai/dsh-agent-preset-registry@file:vendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-preset-registry-0.1.7-alpha.2.tgz#vendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-preset-registry-0.1.7-alpha.2.tgz::hash=520563&locator=deepseek-harness-desktop%40workspace%3A."
@@ -15006,12 +15053,12 @@ __metadata:
 
 "dsh-sub2api@file:../../dsh-sub2api::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
   version: 0.1.0
-  resolution: "dsh-sub2api@file:../../dsh-sub2api#../../dsh-sub2api::hash=74a14a&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+  resolution: "dsh-sub2api@file:../../dsh-sub2api#../../dsh-sub2api::hash=6c4780&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
   peerDependencies:
     react: 18.3.1
   bin:
     dsh-sub2api: ./index.mjs
-  checksum: 10c0/1458601a0348223a91c6b3aa82ad7f3f6320f6225a5a941f183f2a400c987aa2fbe964a50cfbdc8035da85659df2f05e64b2b42a39adda48cdb7ec92fa1436ed
+  checksum: 10c0/f89e4a1dbb3169bda127469d52da9c6784bea20e9c1959e1a8a200bccd48d78848bbbb061e0c538bb1edc8d7236b4d0c0186ecdc19eef635bac544a7a64f53d3
   languageName: node
   linkType: hard
 

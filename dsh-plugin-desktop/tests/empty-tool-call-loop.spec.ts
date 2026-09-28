@@ -66,6 +66,27 @@ async function loadExecuteToolCalls(): Promise<ExecuteToolCalls> {
 }
 
 describe('empty tool-call handling', () => {
+  it('keeps malformed tool names out of model-visible assistant history', async () => {
+    const original = readFileSync(agentLoopLibPath, 'utf8')
+    const patched = `${original}\nexport { sanitizeAssistantToolCallNames };\n`
+    const tempDir = mkdtempSync(join(tmpdir(), 'dsh-agent-loop-sanitize-'))
+    cleanupPaths.add(tempDir)
+    const tempFile = join(tempDir, 'index.mjs')
+    writeFileSync(tempFile, patched)
+    const module = await import(`${pathToFileURL(tempFile).href}?t=${Date.now()}`)
+
+    const valid = { type: 'tool-call', id: 'valid', name: 'web_search', arguments: '{}' }
+    const malformed = { type: 'tool-call', id: 'empty-name', name: '', arguments: '{"queries":["microduck"]}' }
+    const content = module.sanitizeAssistantToolCallNames([valid, malformed])
+
+    expect(content).toEqual([
+      valid,
+      { ...malformed, name: 'dsh_invalid_tool_call' },
+    ])
+    expect(content[0]).toBe(valid)
+    expect(malformed.name).toBe('')
+  })
+
   it('fails once with a clear terminal result instead of entering the unknown-tool dispatch path', async () => {
     const executeToolCalls = await loadExecuteToolCalls()
     const session = new SessionRecorder()
@@ -104,9 +125,9 @@ describe('empty tool-call handling', () => {
         arguments: '{}',
       },
       {
-        id: '',
+        id: 'call-empty-name',
         name: '',
-        arguments: '{}',
+        arguments: '{"queries":["microduck"],"api_key":"must-not-leak"}',
       },
     ], new AbortController().signal, () => {})
 
@@ -125,9 +146,9 @@ describe('empty tool-call handling', () => {
       data: {
         turn: 1,
         step: 1,
-        callId: '',
+        callId: 'call-empty-name',
         name: '',
-        arguments: '{}',
+        arguments: '{"queries":["microduck"],"api_key":"must-not-leak"}',
       },
     })
     expect(session.events[3]).toMatchObject({
@@ -139,7 +160,7 @@ describe('empty tool-call handling', () => {
           role: 'user',
           content: [{
             type: 'tool-result',
-            toolCallId: '',
+            toolCallId: 'call-empty-name',
             isError: true,
             content: [{
               type: 'text',
@@ -155,6 +176,16 @@ describe('empty tool-call handling', () => {
     })
     expect(session.events[3]).toMatchObject({
       data: {
+        error: {
+          name: 'ToolCallProtocolError',
+          code: 'EMPTY_TOOL_NAME',
+          toolCall: {
+            type: 'tool-call',
+            name: '',
+            call_id: 'call-empty-name',
+            argument_fields: ['api_key', 'queries'],
+          },
+        },
         message: {
           content: [{
             content: [{
@@ -164,6 +195,9 @@ describe('empty tool-call handling', () => {
         },
       },
     })
+    const diagnostic = JSON.stringify(session.events[3])
+    expect(diagnostic).not.toContain('microduck')
+    expect(diagnostic).not.toContain('must-not-leak')
   })
 
   it('pairs every trailing call with a synthetic result after a whitespace-only tool name', async () => {
