@@ -1,0 +1,125 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -994,5 +994,107 @@
+ * copied because a decoder may reuse its output buffer after `write()` returns.
+ */
++const REPAIRED_TOOL_NAME = "dsh_invalid_tool_call";
++function nonEmptyString(value) {
++	return typeof value === "string" && value.trim() !== "";
++}
++function repairKey(data) {
++	return `${data.turn}:${data.step}`;
++}
++function repairCallId(data, index) {
++	return `dsh-invalid-tool-call-${data.turn}-${data.step}-${index + 1}`;
++}
++function repairAssistantStream(stream, repairs) {
++	if (!Array.isArray(stream) || repairs.length === 0) return;
++	const byIndex = /* @__PURE__ */ new Map(repairs.map((repair) => [repair.contentIndex, repair]));
++	for (const record of stream) {
++		if (typeof record !== "object" || record === null) continue;
++		if (record.type === "tool-call-chunks") {
++			const repair = byIndex.get(record.index);
++			if (repair === void 0) continue;
++			if (!nonEmptyString(record.id)) record.id = repair.id;
++			if (!nonEmptyString(record.name)) record.name = repair.name;
++			continue;
++		}
++		if (record.type !== "chunk" || typeof record.chunk !== "object" || record.chunk === null) continue;
++		const chunk = record.chunk;
++		if (chunk.type === "tool-call-delta") {
++			const repair = byIndex.get(chunk.index);
++			if (repair === void 0) continue;
++			if (!nonEmptyString(chunk.id)) chunk.id = repair.id;
++			if (!nonEmptyString(chunk.name)) chunk.name = repair.name;
++			continue;
++		}
++		if (chunk.type !== "block-end" || typeof chunk.block !== "object" || chunk.block === null || chunk.block.type !== "tool-call") continue;
++		const repair = byIndex.get(chunk.index);
++		if (repair === void 0) continue;
++		if (!nonEmptyString(chunk.block.id)) chunk.block.id = repair.id;
++		if (!nonEmptyString(chunk.block.name)) chunk.block.name = repair.name;
++	}
++}
++function findPendingRepair(repairs, callId, name, requireStarted) {
++	if (!Array.isArray(repairs)) return;
++	if (nonEmptyString(callId)) {
++		const exact = repairs.find((repair) => repair.id === callId && repair.finished !== true && (!requireStarted || repair.started === true));
++		if (exact !== void 0) return exact;
++	}
++	if (nonEmptyString(name)) {
++		const named = repairs.find((repair) => repair.name === name && repair.finished !== true && (!requireStarted || repair.started === true));
++		if (named !== void 0) return named;
++	}
++	return repairs.find((repair) => repair.finished !== true && (!requireStarted || repair.started === true));
++}
++function repairMalformedToolIdentity(row, pending) {
++	if (typeof row !== "object" || row === null || typeof row.data !== "object" || row.data === null) return row;
++	const data = row.data;
++	if (!Number.isSafeInteger(data.turn) || !Number.isSafeInteger(data.step)) return row;
++	const key = repairKey(data);
++	if (row.type === "assistant/message") {
++		const message = data.message;
++		if (typeof message !== "object" || message === null || !Array.isArray(message.content)) return row;
++		const repairs = [];
++		let toolIndex = 0;
++		for (let contentIndex = 0; contentIndex < message.content.length; contentIndex += 1) {
++			const block = message.content[contentIndex];
++			if (typeof block !== "object" || block === null || block.type !== "tool-call") continue;
++			const id = nonEmptyString(block.id) ? block.id : repairCallId(data, toolIndex);
++			const name = nonEmptyString(block.name) ? block.name : REPAIRED_TOOL_NAME;
++			if (id !== block.id || name !== block.name) {
++				block.id = id;
++				block.name = name;
++			}
++			repairs.push({ id, name, contentIndex });
++			toolIndex += 1;
++		}
++		if (repairs.length > 0) {
++			pending.set(key, repairs);
++			repairAssistantStream(data.stream, repairs);
++		}
++		return row;
++	}
++	const repairs = pending.get(key);
++	if (row.type === "tool/call") {
++		const repair = findPendingRepair(repairs, data.callId, data.name, false);
++		if (repair === void 0) return row;
++		if (!nonEmptyString(data.callId)) data.callId = repair.id;
++		if (!nonEmptyString(data.name)) data.name = repair.name;
++		repair.started = true;
++		return row;
++	}
++	if (row.type === "tool/result") {
++		const message = data.message;
++		const source = typeof message === "object" && message !== null && typeof message.source === "object" && message.source !== null ? message.source : void 0;
++		const block = typeof message === "object" && message !== null && Array.isArray(message.content) ? message.content[0] : void 0;
++		if (source?.kind !== "tool" || typeof block !== "object" || block === null || block.type !== "tool-result") return row;
++		const repair = findPendingRepair(repairs, source.callId, void 0, false);
++		if (repair === void 0) return row;
++		if (!nonEmptyString(source.callId)) source.callId = repair.id;
++		if (!nonEmptyString(block.toolCallId)) block.toolCallId = repair.id;
++		repair.finished = true;
++		return row;
++	}
++	if (row.type === "step/end" || row.type === "turn/end") pending.delete(key);
++	return row;
++}
+ var SessionLogScanner = class {
+ 	recovery;
+ 	meta;
+@@ -1007,6 +1113,7 @@
+ 	eventLine = 0;
+ 	issue;
+ 	finished = false;
++	pendingToolIdentityRepairs = /* @__PURE__ */ new Map();
+ 	/**
+ 	* Create an event scanner from exactly one newline-terminated header record.
+ 	* @param headerRecord - the complete first JSONL record, including its newline.
+@@ -1077,4 +1184,5 @@
+ 			this.issue ??= issue;
+ 			return;
+ 		}
++		decoded = repairMalformedToolIdentity(decoded, this.pendingToolIdentityRepairs);
+ 		try {

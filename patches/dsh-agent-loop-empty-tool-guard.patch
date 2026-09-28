@@ -4,7 +4,7 @@ diff --git a/lib/index.js b/lib/index.js
 @@ -13,1 +13,1 @@
 -import { TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER } from "@deepseek-ai/dsh-tools";
 +import { TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER, validateJsonSchemaValue } from "@deepseek-ai/dsh-tools";
-@@ -504,25 +504,160 @@
+@@ -504,25 +504,172 @@
  * @param signal - abort signal shared by the step.
  * @param acceptContext - accepts committed result context for the next step boundary.
  */
@@ -18,10 +18,21 @@ diff --git a/lib/index.js b/lib/index.js
 +function hasEmptyToolCallName(block) {
 +	return typeof block.name !== "string" || block.name.trim() === "";
 +}
-+function sanitizeAssistantToolCallNames(content) {
++function hasEmptyToolCallId(block) {
++	return typeof block.id !== "string" || block.id.trim() === "";
++}
++function fallbackToolCallId(turn, step, index) {
++	return `dsh-invalid-tool-call-${turn}-${step}-${index + 1}`;
++}
++function sanitizeAssistantToolCallNames(content, turn = 0, step = 0) {
++	let callIndex = 0;
 +	return content.map((block) => {
-+		if (block.type !== "tool-call" || !hasEmptyToolCallName(block)) return block;
-+		return { ...block, name: "dsh_invalid_tool_call" };
++		if (block.type !== "tool-call") return block;
++		const index = callIndex++;
++		const name = hasEmptyToolCallName(block) ? "dsh_invalid_tool_call" : block.name;
++		const id = hasEmptyToolCallId(block) ? fallbackToolCallId(turn, step, index) : block.id;
++		if (name === block.name && id === block.id) return block;
++		return { ...block, name, id };
 +	});
 +}
 +function sanitizedToolCallDiagnostic(block) {
@@ -122,7 +133,8 @@ diff --git a/lib/index.js b/lib/index.js
 -		block,
 -		exec: {
 +	const repairState = toolArgumentRepairStateFor(session, turn);
-+	const planned = toolCalls.map((block) => {
++	const planned = toolCalls.map((originalBlock, index) => {
++		const block = hasEmptyToolCallId(originalBlock) ? { ...originalBlock, id: fallbackToolCallId(turn, step, index) } : originalBlock;
 +		const exec = {
  			callId: block.id,
  			name: block.name,
@@ -171,13 +183,13 @@ diff --git a/lib/index.js b/lib/index.js
  		next += outcome.consumed;
  		concluded ||= outcome.concluded;
  		if (outcome.aborted) {
-@@ -1103,3 +1239,4 @@
+@@ -1103,3 +1251,4 @@
 -				const message = createAssistantMessage({
 -					content: live.blocks(),
 +				const content = live.blocks();
 +				const message = createAssistantMessage({
-+					content: sanitizeAssistantToolCallNames(content),
++					content: sanitizeAssistantToolCallNames(content, turn, step),
  					source: {
-@@ -1116,1 +1253,1 @@
+@@ -1116,1 +1265,1 @@
 -				const toolCalls = message.content.filter((block) => block.type === "tool-call");
 +				const toolCalls = content.filter((block) => block.type === "tool-call");

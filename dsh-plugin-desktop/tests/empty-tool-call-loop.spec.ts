@@ -76,12 +76,12 @@ describe('empty tool-call handling', () => {
     const module = await import(`${pathToFileURL(tempFile).href}?t=${Date.now()}`)
 
     const valid = { type: 'tool-call', id: 'valid', name: 'web_search', arguments: '{}' }
-    const malformed = { type: 'tool-call', id: 'empty-name', name: '', arguments: '{"queries":["microduck"]}' }
-    const content = module.sanitizeAssistantToolCallNames([valid, malformed])
+    const malformed = { type: 'tool-call', id: '', name: '', arguments: '{"queries":["microduck"]}' }
+    const content = module.sanitizeAssistantToolCallNames([valid, malformed], 4, 2)
 
     expect(content).toEqual([
       valid,
-      { ...malformed, name: 'dsh_invalid_tool_call' },
+      { ...malformed, id: 'dsh-invalid-tool-call-4-2-2', name: 'dsh_invalid_tool_call' },
     ])
     expect(content[0]).toBe(valid)
     expect(malformed.name).toBe('')
@@ -125,7 +125,7 @@ describe('empty tool-call handling', () => {
         arguments: '{}',
       },
       {
-        id: 'call-empty-name',
+        id: '',
         name: '',
         arguments: '{"queries":["microduck"],"api_key":"must-not-leak"}',
       },
@@ -146,7 +146,7 @@ describe('empty tool-call handling', () => {
       data: {
         turn: 1,
         step: 1,
-        callId: 'call-empty-name',
+        callId: 'dsh-invalid-tool-call-1-1-2',
         name: '',
         arguments: '{"queries":["microduck"],"api_key":"must-not-leak"}',
       },
@@ -158,9 +158,13 @@ describe('empty tool-call handling', () => {
         step: 1,
         message: {
           role: 'user',
+          source: {
+            kind: 'tool',
+            callId: 'dsh-invalid-tool-call-1-1-2',
+          },
           content: [{
             type: 'tool-result',
-            toolCallId: 'call-empty-name',
+            toolCallId: 'dsh-invalid-tool-call-1-1-2',
             isError: true,
             content: [{
               type: 'text',
@@ -182,7 +186,7 @@ describe('empty tool-call handling', () => {
           toolCall: {
             type: 'tool-call',
             name: '',
-            call_id: 'call-empty-name',
+            call_id: 'dsh-invalid-tool-call-1-1-2',
             argument_fields: ['api_key', 'queries'],
           },
         },

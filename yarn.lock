@@ -1419,7 +1419,7 @@ __metadata:
 
 "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-agent-loop-0.1.5-rc.2.tgz#./patches/dsh-agent-loop-empty-tool-guard.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.5-rc.2
-  resolution: "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-agent-loop-0.1.5-rc.2.tgz%23vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-agent-loop-0.1.5-rc.2.tgz%3A%3Ahash=b24fc3&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-agent-loop-empty-tool-guard.patch::version=0.1.5-rc.2&hash=4c58a7&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-agent-loop-0.1.5-rc.2.tgz%23vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-agent-loop-0.1.5-rc.2.tgz%3A%3Ahash=b24fc3&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-agent-loop-empty-tool-guard.patch::version=0.1.5-rc.2&hash=925ff1&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     "@deepseek-ai/dsh-brand": "npm:^0.1.5-rc.2"
     "@deepseek-ai/dsh-util-values": "npm:^0.1.5-rc.2"
@@ -1437,13 +1437,13 @@ __metadata:
     "@deepseek-ai/dsh-settings": ^0.1.5-rc.2
     "@deepseek-ai/dsh-system-prompt": ^0.1.5-rc.2
     "@deepseek-ai/dsh-tools": ^0.1.5-rc.2
-  checksum: 10c0/6118d8a2e62d811b23be43be44accd21225ac4826f682d03ab43ac2ad47d7220be4dda31a4428959cdaba3fcf8d76d40e2d7f3a9df3816b1bb4184068441ba47
+  checksum: 10c0/471851d20030ebf37face32603cdb5a34c0fc208e8235ba188f19aff19ee32ec340b16053989798f4249b15bbc42aad000062a262794c9d5818fe71cdebecefc
   languageName: node
   linkType: hard
 
 "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-loop-0.1.7-alpha.2.tgz#./patches/dsh-agent-loop-empty-tool-guard.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.7-alpha.2
-  resolution: "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-loop-0.1.7-alpha.2.tgz%23vendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-loop-0.1.7-alpha.2.tgz%3A%3Ahash=3d2079&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-agent-loop-empty-tool-guard.patch::version=0.1.7-alpha.2&hash=4c58a7&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-agent-loop@patch:@deepseek-ai/dsh-agent-loop@file%3Avendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-loop-0.1.7-alpha.2.tgz%23vendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-agent-loop-0.1.7-alpha.2.tgz%3A%3Ahash=3d2079&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-agent-loop-empty-tool-guard.patch::version=0.1.7-alpha.2&hash=925ff1&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     "@deepseek-ai/dsh-brand": "npm:0.1.7-alpha.2"
     "@deepseek-ai/dsh-util-values": "npm:0.1.7-alpha.2"
@@ -1460,7 +1460,7 @@ __metadata:
     "@deepseek-ai/dsh-session-projection": 0.1.7-alpha.2
     "@deepseek-ai/dsh-system-prompt": 0.1.7-alpha.2
     "@deepseek-ai/dsh-tools": 0.1.7-alpha.2
-  checksum: 10c0/f97701995ee3e3e7c05f6ed4a26b9f0f7fbff8117f783fc40299a3ca89e71e4ac7bcab2527ee4e71d790d40adcfb75ef7c501b250eec9abdcb9ec6c6510b5a1d
+  checksum: 10c0/5fbc422e142197301807308cf4606af24a3203dbbc5c3f24fa997a3ea2d024f4b3e9fbecfeb75f69716e3c2d820a2f4f4fa8abeb006a7be743fb8c56b297c9b2
   languageName: node
   linkType: hard
 
@@ -6349,6 +6349,44 @@ __metadata:
     "@deepseek-ai/dsh-session": 0.1.7-alpha.2
     "@deepseek-ai/dsh-session-persistence": 0.1.7-alpha.2
   checksum: 10c0/e9e8c444132be582d3f054a922c8e87aecc4b53ed32e0a8bc2bc9e5294df080bfca1e68e376e62f99870990bde3c307a8747dbb5a9335df59736cca8b1a90bd9
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-session-persistence-jsonl@patch:@deepseek-ai/dsh-session-persistence-jsonl@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-session-persistence-jsonl-0.1.5-rc.2.tgz#./patches/dsh-session-persistence-jsonl-empty-tool-repair.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.5-rc.2
+  resolution: "@deepseek-ai/dsh-session-persistence-jsonl@patch:@deepseek-ai/dsh-session-persistence-jsonl@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-session-persistence-jsonl-0.1.5-rc.2.tgz%23vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-session-persistence-jsonl-0.1.5-rc.2.tgz%3A%3Ahash=845324&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-session-persistence-jsonl-empty-tool-repair.patch::version=0.1.5-rc.2&hash=415971&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/dsh-llm": "npm:^0.1.5-rc.2"
+    "@deepseek-ai/dsh-session-format": "npm:^0.1.5-rc.2"
+    "@deepseek-ai/dsh-session-format-catalog": "npm:^0.1.5-rc.2"
+    "@deepseek-ai/dsh-session-format-v2-to-v3": "npm:^0.1.5-rc.2"
+    "@deepseek-ai/node-addon-system": "npm:^0.1.2"
+    "@deepseek-ai/schemastery": "npm:^3.18.2"
+    koffi: "npm:^3.1.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.2
+    "@deepseek-ai/dsh-session": ^0.1.5-rc.2
+    "@deepseek-ai/dsh-session-persistence": ^0.1.5-rc.2
+  checksum: 10c0/4d41cef5126ad9999fdbb55b7dd5768298e13e97989cd4d29eab4b6b1bb5fdaf0b0ee4014a4fdaaf27ae71e52f4ec0c3e66a1fabc588c8a95a80e6824d92a41a
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-session-persistence-jsonl@patch:@deepseek-ai/dsh-session-persistence-jsonl@file%3Avendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-session-persistence-jsonl-0.1.7-alpha.2.tgz#./patches/dsh-session-persistence-jsonl-empty-tool-repair.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.7-alpha.2
+  resolution: "@deepseek-ai/dsh-session-persistence-jsonl@patch:@deepseek-ai/dsh-session-persistence-jsonl@file%3Avendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-session-persistence-jsonl-0.1.7-alpha.2.tgz%23vendor/dsh-runtime/0.1.7-alpha.2/deepseek-ai-dsh-session-persistence-jsonl-0.1.7-alpha.2.tgz%3A%3Ahash=91a7e1&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-session-persistence-jsonl-empty-tool-repair.patch::version=0.1.7-alpha.2&hash=415971&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/dsh-llm": "npm:0.1.7-alpha.2"
+    "@deepseek-ai/dsh-session-format": "npm:0.1.7-alpha.2"
+    "@deepseek-ai/dsh-session-format-catalog": "npm:0.1.7-alpha.2"
+    "@deepseek-ai/dsh-session-format-v3-to-v4": "npm:0.1.7-alpha.2"
+    "@deepseek-ai/node-addon-system": "npm:~0.1.2"
+    "@deepseek-ai/schemastery": "npm:~3.18.4"
+    koffi: "npm:^3.1.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ~4.0.4
+    "@deepseek-ai/dsh-session": 0.1.7-alpha.2
+    "@deepseek-ai/dsh-session-persistence": 0.1.7-alpha.2
+  checksum: 10c0/1a133e0f9503e3806a7a93fd45b27907e8b64a03f773e5fe95b14af9f72979ee516c453e5d22d936b8f9a34ff29dae6a35e0f382b9a9acdd746f610fd046e8d6
   languageName: node
   linkType: hard
 
