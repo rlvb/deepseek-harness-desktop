@@ -12825,7 +12825,7 @@ __metadata:
 
 "@xmanrui/dsh-im@file:../../dsh-im::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
   version: 3.0.8
-  resolution: "@xmanrui/dsh-im@file:../../dsh-im#../../dsh-im::hash=554141&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+  resolution: "@xmanrui/dsh-im@file:../../dsh-im#../../dsh-im::hash=59ad4f&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
   dependencies:
     "@tencent-connect/qqbot-connector": "npm:1.2.0"
     "@tencent-connect/qqbot-nodejs": "npm:1.0.4"
@@ -12835,7 +12835,7 @@ __metadata:
     ws: "npm:8.21.3"
   bin:
     dsh-im: bin/dsh-im.mjs
-  checksum: 10c0/03072ecfed7d38cdcb598a7b5913cc1f2d27c76cb7e01a0517492aca08ff8703e863778eea71ca9d7da65ed7f38e167b11e47e0602a4f74596efe156af83fcac
+  checksum: 10c0/5635880eb7fcab77b4583b9e970326972069c4440cb552e722f8ba9e913bdec87f503b9f3c3903ddde190a6a4dc12162de11c9735b97fb1003c94a6d3298e75e
   languageName: node
   linkType: hard
 
