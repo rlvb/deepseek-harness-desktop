@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import {
   createDesktopBrowserAccess,
+  DESKTOP_RENDERER_ACCESS_HEADER,
   desktopRendererWebSocketProtocol,
   type DesktopBrowserAccess,
 } from '../src/desktop-browser-access.ts'
@@ -134,6 +135,9 @@ describe('Desktop WebServer browser gate', () => {
     await expect(exact.text()).resolves.toBe('private')
     const internal = server.createInternalHarnessTransport()
     if (internal === undefined) throw new Error('internal Harness transport was not created')
+    expect(internal.webSocketHeaders).toEqual({
+      [DESKTOP_RENDERER_ACCESS_HEADER]: access.rendererHeader.value,
+    })
     const internalResponse = await internal.fetchImpl(`${root}/api/private`)
     expect(internalResponse.status).toBe(200)
     await expect(internalResponse.text()).resolves.toBe('private')

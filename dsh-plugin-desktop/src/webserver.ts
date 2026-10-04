@@ -80,6 +80,7 @@ export class DesktopWebServer extends WebServer {
   createInternalHarnessTransport(): {
     fetchImpl: typeof fetch
     createWebSocket: (url: string) => WebSocket
+    webSocketHeaders: Readonly<Record<string, string>>
   } | undefined {
     const access = this.ctx.get('desktopBrowserAccess')
     if (access === undefined) return undefined
@@ -96,6 +97,7 @@ export class DesktopWebServer extends WebServer {
     return Object.freeze({
       fetchImpl,
       createWebSocket: (url: string) => new WebSocket(url, protocol),
+      webSocketHeaders: Object.freeze({ [name]: value }),
     })
   }
 

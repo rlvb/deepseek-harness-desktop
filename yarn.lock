@@ -12824,17 +12824,18 @@ __metadata:
   linkType: hard
 
 "@xmanrui/dsh-im@file:../../dsh-im::locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop":
-  version: 3.0.6
-  resolution: "@xmanrui/dsh-im@file:../../dsh-im#../../dsh-im::hash=36e461&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
+  version: 3.0.7
+  resolution: "@xmanrui/dsh-im@file:../../dsh-im#../../dsh-im::hash=b8bfc5&locator=dsh-plugin-desktop%40workspace%3Adsh-plugin-desktop"
   dependencies:
     "@tencent-connect/qqbot-connector": "npm:1.2.0"
     "@tencent-connect/qqbot-nodejs": "npm:1.0.4"
     "@wecom/aibot-node-sdk": "npm:1.0.7"
     dingtalk-stream: "npm:2.1.4"
     qrcode: "npm:1.5.4"
+    ws: "npm:8.21.3"
   bin:
     dsh-im: bin/dsh-im.mjs
-  checksum: 10c0/5c3ad94d1e8116a95a85d613577886646c194f450ac2da8fd55e9a4b1a49a417573a73aeb6fcb8087aee97904150fe785115777f4aa37ec50ef37489afcc316c
+  checksum: 10c0/2d29d2d7ee415f3a76e5b6e3e9ec800405f70ed4f72a9c262b23e3d65d430237a9bbc6c6cfdb421ec88513566a169e9f32fbdb1eb71dc5de57aa65b83765c4a2
   languageName: node
   linkType: hard
 
@@ -21343,7 +21344,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ws@npm:^8.13.0, ws@npm:^8.16.0, ws@npm:^8.18.0, ws@npm:^8.21.0":
+"ws@npm:8.21.3, ws@npm:^8.13.0, ws@npm:^8.16.0, ws@npm:^8.18.0, ws@npm:^8.21.0":
   version: 8.21.3
   resolution: "ws@npm:8.21.3"
   peerDependencies:
