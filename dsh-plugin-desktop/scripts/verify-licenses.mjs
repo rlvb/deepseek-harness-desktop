@@ -34,6 +34,7 @@ const ALLOWED_LICENSES = new Set([
   'Unlicense',
   'MPL-2.0',
   'CC0-1.0',
+  '(MIT OR CC0-1.0)',
   'Zlib',
   'Python-2.0',
 ])
@@ -49,6 +50,16 @@ const NOTICE_LICENSES = new Set([
   'LGPL-3.0-or-later',
   'Apache-2.0 AND LGPL-3.0-or-later',
 ])
+
+/**
+ * Internal-only dependencies reviewed for enterprise validation but not
+ * approved for public redistribution. The verifier remains fail-closed unless
+ * the release operator explicitly supplies --allow-internal-unlicensed.
+ */
+const INTERNAL_REVIEWED_LICENSES = new Map([
+  ['@tencent-connect/qqbot-connector', 'UNLICENSED'],
+])
+const allowInternalUnlicensed = process.argv.includes('--allow-internal-unlicensed')
 
 /**
  * Locate one installed package manifest by walking node_modules directories
@@ -111,7 +122,10 @@ for (let index = 0; index < queue.length; index += 1) {
       if (!hasLicenseFile) {
         failures.push(`${current.name}: license refers to ${JSON.stringify(license)} but no LICENSE file is shipped`)
       }
-    } else if (license !== undefined && !ALLOWED_LICENSES.has(license) && !NOTICE_LICENSES.has(license)) {
+    } else if (license !== undefined
+      && !ALLOWED_LICENSES.has(license)
+      && !NOTICE_LICENSES.has(license)
+      && !(allowInternalUnlicensed && INTERNAL_REVIEWED_LICENSES.get(current.name) === license)) {
       failures.push(`${current.name}: license ${JSON.stringify(license)} is not on the redistribution allowlist`)
     }
     manifests.push({ name: current.name, version: manifest.version, license: license ?? 'SEE LICENSE FILE' })
@@ -140,6 +154,7 @@ if (failures.length > 0) {
 }
 
 const noticeOnly = manifests.filter(entry => NOTICE_LICENSES.has(entry.license))
+const internalOnly = manifests.filter(entry => INTERNAL_REVIEWED_LICENSES.get(entry.name) === entry.license)
 const noticesArg = process.argv.indexOf('--notices')
 if (noticesArg !== -1) {
   const target = process.argv[noticesArg + 1]
@@ -163,6 +178,9 @@ if (noticesArg !== -1) {
     noticeOnly.length === 0
       ? ''
       : `> Notice-required licenses in use: ${[...new Set(noticeOnly.map(entry => entry.license))].join(', ')}. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.`,
+    internalOnly.length === 0
+      ? ''
+      : `> Internal release review: ${internalOnly.map(entry => `${entry.name}@${entry.version ?? ''} declares ${entry.license}`).join(', ')}. These packages are approved only for internal enterprise validation; obtain redistribution permission before any external distribution.`,
     '',
   ].filter(line => line !== '')
   writeFileSync(join(packageRoot, target), lines.join('\n'))

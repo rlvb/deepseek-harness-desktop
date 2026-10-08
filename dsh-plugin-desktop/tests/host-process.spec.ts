@@ -17,7 +17,10 @@ vi.mock('../src/desktop-embedded-browser.ts', () => ({
     dispose = state.browserDispose
   },
 }))
-import { startIsolatedDesktopHost, type IsolatedHostOptions } from '../src/host-process.ts'
+import {
+  formatUnexpectedHostExit, HOST_STDERR_TAIL_CHARS, startIsolatedDesktopHost,
+  type IsolatedHostExit, type IsolatedHostOptions,
+} from '../src/host-process.ts'
 
 function fixture() {
   const messages: unknown[] = []
@@ -48,14 +51,6 @@ it('binds the child before startup and makes repeated teardown idempotent', asyn
   expect(f.onFailure).not.toHaveBeenCalled()
   expect(f.child.postMessage.mock.calls.filter(([m]) => m.method === 'stop')).toHaveLength(1)
 })
-it('reports unexpected Host exit without automatically relaunching or replaying work', async () => {
-  const f = fixture()
-  await startIsolatedDesktopHost(f.options)
-  f.child.emit('exit', 9)
-  expect(f.onFailure).toHaveBeenCalledOnce()
-  await f.host().fiber.dispose()
-  expect(f.child.kill).not.toHaveBeenCalled()
-})
 it('bridges embedded browser login calls from the isolated Host', async () => {
   state.browserLogin.mockClear()
   state.browserDispose.mockClear()
@@ -79,6 +74,14 @@ it('bridges embedded browser login calls from the isolated Host', async () => {
   await f.host().fiber.dispose()
   expect(state.browserDispose).toHaveBeenCalled()
 })
+it('reports unexpected Host exit without automatically relaunching or replaying work', async () => {
+  const f = fixture()
+  await startIsolatedDesktopHost(f.options)
+  f.child.emit('exit', 9)
+  expect(f.onFailure).toHaveBeenCalledOnce()
+  await f.host().fiber.dispose()
+  expect(f.child.kill).not.toHaveBeenCalled()
+})
 it('carries the exit code and how long the Host lived, so a code 0 is not read as a clean exit', async () => {
   const f = fixture()
   await startIsolatedDesktopHost(f.options)
@@ -94,4 +97,26 @@ it('leaves a Desktop-requested teardown off the unexpected-exit record', async (
   await startIsolatedDesktopHost(f.options)
   await f.host().fiber.dispose()
   expect(f.onFailure).not.toHaveBeenCalled()
+})
+it('keeps what a fatal Host said last, since its stderr is otherwise never persisted', async () => {
+  const f = fixture()
+  vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  try {
+    await startIsolatedDesktopHost(f.options)
+    f.child.stderr.emit('data', Buffer.from('x'.repeat(HOST_STDERR_TAIL_CHARS)))
+    // A multibyte character split across two chunks must not turn into replacement characters.
+    const euro = Buffer.from('€')
+    f.child.stderr.emit('data', Buffer.concat([Buffer.from('dsh: fatal load failure: boom '), euro.subarray(0, 1)]))
+    f.child.stderr.emit('data', euro.subarray(1))
+    f.child.emit('exit', 1)
+  } finally { vi.restoreAllMocks() }
+  const [error, exit] = f.onFailure.mock.calls[0] as [Error, IsolatedHostExit]
+  expect(exit.stderrTail).toHaveLength(HOST_STDERR_TAIL_CHARS)
+  expect(exit.stderrTail.endsWith('dsh: fatal load failure: boom €')).toBe(true)
+  expect(formatUnexpectedHostExit(error, exit))
+    .toBe(`DSH Host exited (1); restart the application to reconnect\nLast DSH Host stderr:\n${exit.stderrTail}`)
+})
+it('logs only the exit reason when the Host wrote nothing', () => {
+  const error = new Error('DSH Host exited (0); restart the application to reconnect')
+  expect(formatUnexpectedHostExit(error, { exitCode: 0, uptimeMs: 1, stderrTail: '\n' })).toBe(error.message)
 })

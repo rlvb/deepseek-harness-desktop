@@ -42,7 +42,6 @@ DSH home `settings.yaml` 文档中的 `dsh-desktop.mode` 字段是单一事实�
 dsh-desktop:
   mode: compatibility # compatibility、extended 或 advanced
   macosMaterial: transparent # off 或 transparent
-  windowsMaterial: acrylic # off、acrylic，系统支持时还可用 mica
 ```
 
 Launcher 会在组合一个 generation 之前，读取当前 `@deepseek-ai/dsh-settings-file` row 解析到的同一份文件。Host 通过标准 settings service 注册 `dsh-desktop` namespace。profile manifest 中没有平行的模式值。
@@ -63,7 +62,7 @@ Cordis row 会在 profile 激活期间登记原生窗口参数。Launcher 只在
 
 本次 alpha runtime 迁移不再携带 Desktop 自有的工作区文件夹拖放行为或聊天附件拖放隔离补丁。在按 alpha Client UI 重新评估这些交互前，请使用普通工作区选择流程。
 
-在所有呈现模式下，Windows PowerShell 都会保留上游 `pwsh-sandbox` 行为与 Windows ACL confinement。Launcher generation 只会把该 Host provider 替换为同一 package 中的 `dsh-plugin-desktop-beta/windows-pwsh-sandbox` 子路径。对于与上游 ACL runner 完全匹配的 argv，adapter 会让打包后的 Electron executable 通过私有 trampoline 以 Node 模式启动。Trampoline 会先精确校验上游 runner，再在导入它之前移除 Node-mode 环境变量，并确保自身这个原本没有 console 的 Windows 进程拥有一个隐藏 console。受限 PowerShell 进程随后可以继承该 console，而不必在已经使用受限 token 时自行创建。Console 分配失败会通过现有带签名的 runner 失败路径退出；全部 ACL policy 与后续失败处理仍委托给上游 runner。Desktop deploy root 还会保留 Yarn patch，在两条原生受限进程路径上把 `STARTF_USESHOWWINDOW`、现有的 `STARTF_USESTDHANDLES` 与 `SW_HIDE` 组合起来。它不会使用与上游实现不兼容的 `CREATE_NO_WINDOW` 或 `CREATE_NEW_CONSOLE` flag。直接使用 `danger-full-access` 的 PowerShell、macOS 与 Linux 执行路径保持不变；Windows confinement 失败时不会自动回退到不受限执行。
+在所有呈现模式下，Windows PowerShell 都会保留上游 `pwsh-sandbox` 行为与 Windows ACL confinement。Launcher generation 只会把该 Host provider 替换为同一 package 中的 `dsh-plugin-desktop-beta/windows-pwsh-sandbox` 子路径。对于与上游 ACL runner 完全匹配的 argv，adapter 会让打包后的 Electron executable 通过私有 trampoline 以 Node 模式启动。Trampoline 会先精确校验上游 runner，再在导入它之前移除 Node-mode 环境变量，并确保自身这个原本没有 console 的 Windows 进程拥有一个没有窗口的 console：Windows 11 24H2 及更高版本会直接分配，更早的版本则附加到一个短暂运行、不受限的 `cmd.exe` 的无窗口 console；只有两者都失败时，才分配普通 console 并将其隐藏。受限 PowerShell 进程随后可以继承该 console，而不必在已经使用受限 token 时自行创建，也不会有 console 窗口被交给 Windows Terminal。Console 分配失败会通过现有带签名的 runner 失败路径退出；全部 ACL policy 与后续失败处理仍委托给上游 runner。Desktop deploy root 还会保留 Yarn patch，在两条原生受限进程路径上把 `STARTF_USESHOWWINDOW`、现有的 `STARTF_USESTDHANDLES` 与 `SW_HIDE` 组合起来。它不会使用与上游实现不兼容的 `CREATE_NO_WINDOW` 或 `CREATE_NEW_CONSOLE` flag。直接使用 `danger-full-access` 的 PowerShell、macOS 与 Linux 执行路径保持不变；Windows confinement 失败时不会自动回退到不受限执行。
 
 ## 扩展窗口模式
 
@@ -75,7 +74,7 @@ Cordis row 会在 profile 激活期间登记原生窗口参数。Launcher 只在
 
 DOM 会把操作栏声明为 Desktop frame，并把下移后的上游 root 声明为它的 content viewport。`shell.overlay` 会成为 fixed 插件 surface 的 containing block，直接 portal 到 `body` 的对话框则获得相同的内容偏移；两条路径都会被限制在 36 像素 frame 下方，不会再压暗或拦截顶栏。
 
-自定义窗口材质独立于模式设置。macOS 可选“关闭”或“透明材质”；Windows 可选“关闭”和原生“亚克力”，仅 Windows 11 build 22621 及以上显示 Mica。Windows 10 因此使用真正的原生亚克力，而不是 CSS 模拟。已持久化但系统不支持的 Mica 会按能力门槛回退到亚克力。切换模式或材质都会执行有序重启。
+自定义窗口材质独立于模式设置。macOS 可选“关闭”或“透明材质”。Windows 不提供材质选项，所有 Windows 窗口都是普通的不透明窗口。已移除的 `windowsMaterial` 旧值 `acrylic` 和 `mica` 仍可读取，旧设置照常启动，两者都按关闭处理。切换模式或材质都会执行有序重启。
 
 ## 增强模式
 

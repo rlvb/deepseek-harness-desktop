@@ -4,10 +4,10 @@ import { mkdtempSync } from 'node:fs'
 import { cleanupDisposableTree } from '../../dsh-plugin-desktop-beta/src/disposable-tree.ts'
 import { join } from 'node:path'
 import { DesktopBackendController } from './backend-controller.ts'
-import { DesktopHostFatalError, DesktopHostProcess } from './host-process.ts'
+import { DesktopHostFatalError, DesktopHostProcess, type DesktopPlatformLoginRequest } from './host-process.ts'
 import { DesktopPreferenceStore, parsePreferences } from './desktop-preferences.ts'
 import { DEFAULT_FEATURES, NextProfiles } from './profiles.ts'
-import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, type DesktopBrowserLinks, type DesktopPreferences, type DesktopState, type DesktopNotification } from './desktop-contract.ts'
+import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, SAFE_MODE_PREFERENCES, type DesktopBrowserLinks, type DesktopPreferences, type DesktopState, type DesktopNotification } from './desktop-contract.ts'
 import { DesktopDiagnostics } from './diagnostics.ts'
 import { NextRecovery } from './recovery.ts'
 import { maskSecrets } from './mask-secrets.ts'
@@ -16,12 +16,17 @@ import { authenticateWebHost } from './web-document.ts'
 import { DesktopLanHttpsRuntime } from './lan-https-runtime.ts'
 import type { DesktopLanHttpsCertificate } from './lan-https-certificate.ts'
 import type { DesktopPermission, DesktopPermissionAction, DesktopPermissionSnapshot } from './permissions.ts'
+import { SYSTEM_PROXY_ENV, type DesktopSystemProxyProbe } from './system-proxy.ts'
 
 interface RuntimeOptions {
   home: string
+  /** Disposable desktop settings; recovery continues to address the original home. */
+  stateHome?: string
   root: string
   executable: string
   addresses(): string[]
+  /** The system proxy main probed at startup; the Host decides whether it applies. */
+  systemProxy?(): DesktopSystemProxyProbe
   certificate(addresses: readonly string[]): Promise<DesktopLanHttpsCertificate>
   onFailure(): void
   onChange(): void
@@ -29,6 +34,7 @@ interface RuntimeOptions {
   onTerminal(): void
   onNotification(notification: DesktopNotification): void
   onPermission?(action: DesktopPermissionAction, permission: DesktopPermission): Promise<DesktopPermissionSnapshot>
+  onPlatformLogin?(request: DesktopPlatformLoginRequest): void
 }
 
 export class NextDesktopRuntime {
@@ -54,7 +60,7 @@ export class NextDesktopRuntime {
   constructor(readonly options: RuntimeOptions) {
     this.profiles = new NextProfiles(options.home)
     this.recovery = new NextRecovery(this.profiles)
-    this.settings = new DesktopPreferenceStore(options.home)
+    this.settings = new DesktopPreferenceStore(options.stateHome ?? options.home)
     this.diagnostics = new DesktopDiagnostics(options.home)
     this.backend = new DesktopBackendController(onFailure => this.createHost(onFailure), state => {
       if (state.phase === 'error' && !this.closing) {
@@ -72,8 +78,12 @@ export class NextDesktopRuntime {
   }
 
   initialize(): void {
-    try { this.selected = this.profiles.active } catch (error) { this.report(error) }
-    try { this.preferences = this.settings.read() } catch (error) { this.report(error) }
+    try { this.selected = this.profiles.active } catch (error) {
+      if (this.safeMode) this.diagnostics.append(`Original Profile selection is unavailable: ${String(error)}`, 'warn')
+      else this.report(error)
+    }
+    if (this.safeMode) this.preferences = { ...SAFE_MODE_PREFERENCES }
+    else try { this.preferences = this.settings.read() } catch (error) { this.report(error) }
     this.diagnostics.level = this.preferences.logLevel
   }
 
@@ -96,6 +106,7 @@ export class NextDesktopRuntime {
         safe.ensure(DEFAULT_PROFILE)
         safe.setFeatures(DEFAULT_PROFILE, { remoteControl: false, market: false })
       }
+      if (this.safeMode) this.preferences = { ...SAFE_MODE_PREFERENCES }
       if (!this.safeMode) this.profiles.ensure(this.selected)
     })
     // The backend publishes failures after owned process cleanup.
@@ -106,8 +117,12 @@ export class NextDesktopRuntime {
   async restart(change: () => void | Promise<void> = () => {}): Promise<void> {
     await this.backend.stop()
     if (this.closing) return
+    const wasSafe = this.safeMode
     await change()
-    if (!this.safeMode) this.cleanupSafeHome()
+    if (!this.safeMode) {
+      this.cleanupSafeHome()
+      if (wasSafe) this.preferences = new DesktopPreferenceStore(this.options.home).read()
+    }
     await this.start()
   }
 
@@ -123,6 +138,7 @@ export class NextDesktopRuntime {
   }
 
   writePreferences(value: unknown): void {
+    if (this.safeMode) throw new Error('Desktop preferences are fixed in Safe Mode')
     this.preferences = this.settings.write(parsePreferences(value))
     this.diagnostics.level = this.preferences.logLevel
     this.options.onChange()
@@ -186,7 +202,7 @@ export class NextDesktopRuntime {
     let checkpoint: DesktopState['checkpoint'] = null
     let failure = this.failure
     try { profiles = this.profiles.list() } catch (error) { failure ||= maskSecrets(String(error)) }
-    try { features = this.profiles.features(this.selected) } catch (error) { failure ||= maskSecrets(String(error)) }
+    if (!this.safeMode) try { features = this.profiles.features(this.selected) } catch (error) { failure ||= maskSecrets(String(error)) }
     try { const saved = this.recovery.latest(this.selected); if (saved) checkpoint = { created: saved.created } } catch { /* Recovery remains usable without backups. */ }
     return { selected: this.selected, profiles, unavailableProfiles: profiles.filter(name => !this.profiles.selectable(name)), features, preferences: { ...this.preferences }, phase: this.recoveryMode ? 'recovery' : !this.auth && failure ? 'error' : this.backend.state.phase,
       busy: this.busy, failure, safeMode: this.safeMode, home: this.options.home,
@@ -244,7 +260,7 @@ export class NextDesktopRuntime {
     const { options } = this
     const actualHome = this.safeMode ? this.safeHome! : options.home
     const profile = this.safeMode ? DEFAULT_PROFILE : this.selected
-    const effective = this.safeMode ? { ...this.preferences, browserAccess: false, networkExposure: 'loopback' as const, port: 0 } : this.preferences
+    const effective = this.safeMode ? { ...SAFE_MODE_PREFERENCES } : this.preferences
     const addresses = options.addresses()
     const token = randomBytes(32).toString('base64url')
     const lan = new DesktopLanHttpsRuntime({ addresses, requestedPort: effective.lanPort,
@@ -254,9 +270,10 @@ export class NextDesktopRuntime {
     const host = new DesktopHostProcess(options.executable, options.root, new NextProfiles(actualHome).directory(profile), undefined,
       { ...process.env, DSH_HOME: actualHome, DSH_NEXT_NATIVE_TOKEN: token,
         DSH_NEXT_PREFERENCES: JSON.stringify(effective), DSH_NEXT_TRUSTED_HOSTS: JSON.stringify(addresses),
+        [SYSTEM_PROXY_ENV]: JSON.stringify(options.systemProxy?.() ?? {}),
         ...(this.safeMode ? { DSH_TELEMETRY_DISABLED: '1' } : {}) },
       onFailure, undefined, undefined, join(options.root, 'lib', 'host.js'), options.onRestart, options.onNotification,
-      chunk => this.diagnostics.hostChunk(chunk), options.onTerminal, options.onPermission)
+      chunk => this.diagnostics.hostChunk(chunk), options.onTerminal, options.onPermission, undefined, options.onPlatformLogin)
     this.hostProcess = host
     return {
       start: async (): Promise<void> => {
@@ -275,7 +292,8 @@ export class NextDesktopRuntime {
         if (effective.browserAccess && effective.networkExposure === 'lan') {
           const edge = await lan.setEnabled(true)
           if (stopped) { await lan.stop(); return }
-          if (edge.state === 'failed') this.report(`LAN HTTPS: ${edge.errorCode}`)
+          // The optional LAN edge must not turn a ready loopback Host into recovery mode.
+          if (edge.state === 'failed') this.diagnostics.append(`LAN HTTPS: ${edge.errorCode}`, 'warn')
         }
         if (!this.safeMode) {
           try { this.recovery.checkpoint(this.selected) } catch (error) { this.diagnostics.append(`Recovery checkpoint: ${String(error)}`, 'warn') }

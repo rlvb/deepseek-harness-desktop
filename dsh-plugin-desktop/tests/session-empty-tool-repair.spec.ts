@@ -140,7 +140,12 @@ describe.each(['none', 'zstd'] as const)('empty tool identity recovery (%s)', (c
         })
         expect(call?.data).toMatchObject({ callId: repairedId, name: 'dsh_invalid_tool_call' })
         expect(result?.data.message.source).toEqual({ kind: 'tool', callId: repairedId })
-        expect(result?.data.message.content[0]).toMatchObject({ toolCallId: repairedId })
+        expect(result?.data.message).toMatchObject({
+          role: 'tool',
+          toolCallId: repairedId,
+          isError: true,
+          content: [{ type: 'text', text: 'invalid tool call' }],
+        })
       } finally {
         await handle.close()
       }

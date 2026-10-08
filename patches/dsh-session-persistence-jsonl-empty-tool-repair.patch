@@ -123,3 +123,19 @@ diff --git a/lib/index.js b/lib/index.js
  		}
 +		decoded = repairMalformedToolIdentity(decoded, this.pendingToolIdentityRepairs);
  		try {
+@@ -1685,6 +1789,7 @@
+ 	fragmentBytes = 0;
+ 	rowIndex = 0;
+ 	issue;
++	pendingToolIdentityRepairs = /* @__PURE__ */ new Map();
+ 	constructor(restore) {
+ 		this.restore = restore;
+ 	}
+@@ -1727,6 +1836,7 @@
+ 			this.issue ??= asError(error);
+ 			return;
+ 		}
++		row = repairMalformedToolIdentity(row, this.pendingToolIdentityRepairs);
+ 		if (this.issue !== void 0) {
+ 			if (typeof row === "object" && row !== null && row.type === "turn/end") throw this.issue;
+ 			return;

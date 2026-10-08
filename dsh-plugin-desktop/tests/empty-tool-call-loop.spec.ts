@@ -19,7 +19,7 @@ type ExecuteToolCalls = (
         finish(exec: unknown, result: unknown): unknown
       }
     }
-    agentLoop: { config: { maxParallelToolCalls: number } }
+    agentLoop: { config: { maxParallelToolCalls: { get(): number } } }
   },
   turn: number,
   step: number,
@@ -116,7 +116,7 @@ describe('empty tool-call handling', () => {
         },
       },
       agentLoop: {
-        config: { maxParallelToolCalls: 1 },
+        config: { maxParallelToolCalls: { get: () => 1 } },
       },
     }, 1, 1, [
       {
@@ -157,19 +157,16 @@ describe('empty tool-call handling', () => {
         turn: 1,
         step: 1,
         message: {
-          role: 'user',
+          role: 'tool',
           source: {
             kind: 'tool',
             callId: 'dsh-invalid-tool-call-1-1-2',
           },
+          toolCallId: 'dsh-invalid-tool-call-1-1-2',
+          isError: true,
           content: [{
-            type: 'tool-result',
-            toolCallId: 'dsh-invalid-tool-call-1-1-2',
-            isError: true,
-            content: [{
-              type: 'text',
-              text: expect.stringContaining('empty tool name'),
-            }],
+            type: 'text',
+            text: expect.stringContaining('empty tool name'),
           }],
         },
       },
@@ -192,9 +189,7 @@ describe('empty tool-call handling', () => {
         },
         message: {
           content: [{
-            content: [{
-              text: expect.stringContaining('Start a new session'),
-            }],
+            text: expect.stringContaining('Start a new session'),
           }],
         },
       },
@@ -233,7 +228,7 @@ describe('empty tool-call handling', () => {
         },
       },
       agentLoop: {
-        config: { maxParallelToolCalls: 1 },
+        config: { maxParallelToolCalls: { get: () => 1 } },
       },
     }, 7, 3, [
       {
@@ -285,15 +280,12 @@ describe('empty tool-call handling', () => {
           turn: 7,
           step: 3,
           message: {
-            role: 'user',
+            role: 'tool',
+            toolCallId: 'blank-name-call',
+            isError: true,
             content: [{
-              type: 'tool-result',
-              toolCallId: 'blank-name-call',
-              isError: true,
-              content: [{
-                type: 'text',
-                text: expect.stringContaining('empty tool name'),
-              }],
+              type: 'text',
+              text: expect.stringContaining('empty tool name'),
             }],
           },
         },
@@ -318,15 +310,12 @@ describe('empty tool-call handling', () => {
           turn: 7,
           step: 3,
           message: {
-            role: 'user',
+            role: 'tool',
+            toolCallId: 'trailing-call-1',
+            isError: true,
             content: [{
-              type: 'tool-result',
-              toolCallId: 'trailing-call-1',
-              isError: true,
-              content: [{
-                type: 'text',
-                text: 'Error: tool call skipped because an earlier tool call had an empty tool name',
-              }],
+              type: 'text',
+              text: 'Error: tool call skipped because an earlier tool call had an empty tool name',
             }],
           },
         },
@@ -351,15 +340,12 @@ describe('empty tool-call handling', () => {
           turn: 7,
           step: 3,
           message: {
-            role: 'user',
+            role: 'tool',
+            toolCallId: 'trailing-call-2',
+            isError: true,
             content: [{
-              type: 'tool-result',
-              toolCallId: 'trailing-call-2',
-              isError: true,
-              content: [{
-                type: 'text',
-                text: 'Error: tool call skipped because an earlier tool call had an empty tool name',
-              }],
+              type: 'text',
+              text: 'Error: tool call skipped because an earlier tool call had an empty tool name',
             }],
           },
         },
@@ -400,7 +386,7 @@ describe('empty tool-call handling', () => {
         },
       },
       agentLoop: {
-        config: { maxParallelToolCalls: 1 },
+        config: { maxParallelToolCalls: { get: () => 1 } },
       },
     }
     const call = {
@@ -424,9 +410,7 @@ describe('empty tool-call handling', () => {
       data: {
         message: {
           content: [{
-            content: [{
-              text: expect.stringContaining('file_path'),
-            }],
+            text: expect.stringContaining('file_path'),
           }],
         },
       },
@@ -447,9 +431,7 @@ describe('empty tool-call handling', () => {
       data: {
         message: {
           content: [{
-            content: [{
-              text: expect.stringContaining('after 1 repair attempt'),
-            }],
+            text: expect.stringContaining('after 1 repair attempt'),
           }],
         },
       },

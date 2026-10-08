@@ -42,7 +42,6 @@ The `dsh-desktop.mode` field in the DSH home `settings.yaml` document is the sin
 dsh-desktop:
   mode: compatibility # compatibility, extended, or advanced
   macosMaterial: transparent # off or transparent
-  windowsMaterial: acrylic # off, acrylic, or mica when supported
 ```
 
 The launcher reads the same file resolved by the active `@deepseek-ai/dsh-settings-file` row before composing a generation. The Host registers the `dsh-desktop` namespace with the standard settings service. There is no parallel mode value in the profile manifest.
@@ -63,7 +62,7 @@ On Windows, the launcher pins the browse directory-picker backend and keeps the 
 
 This alpha runtime migration does not carry the Desktop-owned Workspace folder-drop behavior or the chat-attachment drag-isolation patch. Use the ordinary Workspace selection flow while those interactions are re-evaluated against the alpha Client UI.
 
-Windows PowerShell keeps the upstream `pwsh-sandbox` behavior and Windows ACL confinement in every presentation mode. The launcher generation replaces only that Host provider with the `dsh-plugin-desktop-beta/windows-pwsh-sandbox` subpath from this same package. For the exact upstream ACL-runner argv, the adapter launches the packaged Electron executable in Node mode through a private trampoline. After validating the exact upstream runner and before importing it, the trampoline removes the Node-mode variable and ensures that its otherwise consoleless Windows process owns a hidden console. The restricted PowerShell process can then inherit that console instead of creating one while already running under the restricted token. Console allocation failure exits through the existing signed runner-failure path, and all ACL policy and subsequent failure handling remain delegated to the upstream runner. The desktop deploy root also retains its Yarn patch that combines `STARTF_USESHOWWINDOW` with the existing `STARTF_USESTDHANDLES` and `SW_HIDE` on both native restricted-process paths. It does not use the upstream-incompatible `CREATE_NO_WINDOW` or `CREATE_NEW_CONSOLE` flags. Direct `danger-full-access` PowerShell, macOS, and Linux execution are unchanged; there is no automatic unrestricted fallback when Windows confinement fails.
+Windows PowerShell keeps the upstream `pwsh-sandbox` behavior and Windows ACL confinement in every presentation mode. The launcher generation replaces only that Host provider with the `dsh-plugin-desktop-beta/windows-pwsh-sandbox` subpath from this same package. For the exact upstream ACL-runner argv, the adapter launches the packaged Electron executable in Node mode through a private trampoline. After validating the exact upstream runner and before importing it, the trampoline removes the Node-mode variable and ensures that its otherwise consoleless Windows process owns a console without a window: Windows 11 24H2 and later allocate one directly, and earlier versions attach to the windowless console of a short-lived unrestricted `cmd.exe`; only if both fail does it allocate an ordinary console and hide it. The restricted PowerShell process can then inherit that console instead of creating one while already running under the restricted token, and no console window is handed to Windows Terminal. Console allocation failure exits through the existing signed runner-failure path, and all ACL policy and subsequent failure handling remain delegated to the upstream runner. The desktop deploy root also retains its Yarn patch that combines `STARTF_USESHOWWINDOW` with the existing `STARTF_USESTDHANDLES` and `SW_HIDE` on both native restricted-process paths. It does not use the upstream-incompatible `CREATE_NO_WINDOW` or `CREATE_NEW_CONSOLE` flags. Direct `danger-full-access` PowerShell, macOS, and Linux execution are unchanged; there is no automatic unrestricted fallback when Windows confinement fails.
 
 ## Extended window mode
 
@@ -75,7 +74,7 @@ The command bar remains visible and draggable while upstream overlays are open. 
 
 The DOM declares the command bar as the Desktop frame and the shifted upstream root as its content viewport. The `shell.overlay` layer becomes the containing block for fixed plugin surfaces, while dialogs portalled directly to `body` receive the same content offset. Both paths are therefore bounded below the 36-pixel frame instead of darkening or intercepting it.
 
-Custom-window material is independent from mode. macOS offers **Off** and **Transparent**. Windows offers **Off** and native **Acrylic**; **Mica** appears only on Windows 11 build 22621 or newer. Windows 10 therefore uses native Acrylic rather than a CSS imitation. An unsupported persisted Mica preference is capability-gated to Acrylic. Changing mode or material performs an orderly restart.
+Custom-window material is independent from mode. macOS offers **Off** and **Transparent**. Windows has no material choice, so every Windows window is an ordinary opaque window. The removed `windowsMaterial` values `acrylic` and `mica` stay readable so older settings still boot, and both resolve to off. Changing mode or material performs an orderly restart.
 
 ## Enhanced mode
 

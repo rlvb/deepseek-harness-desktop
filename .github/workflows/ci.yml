@@ -152,14 +152,18 @@ jobs:
           path: ${{ steps.yarn-cache.outputs.dir }}
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
-      - run: yarn workspace ${{ matrix.workspace }} check:win-package
+      # Typecheck is platform-neutral and already gated by `check`.
+      - run: yarn workspace ${{ matrix.workspace }} check:win-package:platform
       - name: Build Windows installer
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
+          # CI artifacts are never published; skipping compression saves minutes.
+          DSH_WINDOWS_PACKAGE_COMPRESSION: store
         run: yarn workspace ${{ matrix.workspace }} dist:win
       - name: Build Windows portable archive
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
+          DSH_WINDOWS_PACKAGE_COMPRESSION: store
         run: yarn workspace ${{ matrix.workspace }} dist:win-portable
 
   # macOS-only universal packaging smoke on a real macOS runner: the signed
@@ -195,7 +199,7 @@ jobs:
           path: ${{ steps.yarn-cache.outputs.dir }}
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
-      - run: yarn workspace ${{ matrix.workspace }} check:linux-package
+      - run: yarn workspace ${{ matrix.workspace }} check:linux-package:platform
       - name: Build Linux AppImage and Debian package
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
@@ -228,10 +232,14 @@ jobs:
           path: ${{ steps.yarn-cache.outputs.dir }}
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
-      - run: yarn workspace ${{ matrix.workspace }} check:mac-package
+      - run: yarn workspace ${{ matrix.workspace }} check:mac-package:platform
       - name: Build macOS smoke artifact
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
+          # The universal merge alone takes 9-17 minutes, so pull requests
+          # package only the runner's native arm64 app. Pushes to master and
+          # manual runs keep the full universal DMG.
+          DSH_MAC_SMOKE_ARCH: ${{ github.event_name == 'pull_request' && 'arm64' || 'universal' }}
         run: yarn workspace ${{ matrix.workspace }} dist:mac-smoke
 
   # Upstream toolchain smoke: the portable-shell scripts must resolve the

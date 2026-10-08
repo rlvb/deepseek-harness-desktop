@@ -7,40 +7,36 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('DeepSeek OpenAI-compatible tool-call stream', () => {
-  it('does not let a later empty function name erase the first non-empty name', async () => {
-    const first = {
-      id: 'completion-1',
-      choices: [{
-        index: 0,
-        delta: {
-          role: 'assistant',
-          tool_calls: [{
-            index: 0,
-            id: 'call-1',
-            type: 'function',
-            function: { name: 'web_search', arguments: '' },
-          }],
-        },
-        finish_reason: null,
-      }],
-    }
-    const malformedFollowup = {
-      id: 'completion-1',
-      choices: [{
-        index: 0,
-        delta: {
-          tool_calls: [{
-            index: 0,
-            function: { name: '', arguments: '{"queries":["microduck"]}' },
-          }],
-        },
-        finish_reason: null,
-      }],
-    }
-    const sse = [first, malformedFollowup]
+describe('DeepSeek Messages tool-call stream', () => {
+  it('keeps the tool identity while later argument deltas omit it', async () => {
+    const events = [{
+      type: 'message_start',
+      message: { usage: { input_tokens: 5, output_tokens: 0 } },
+    }, {
+      type: 'content_block_start',
+      index: 0,
+      content_block: {
+        type: 'tool_use',
+        id: 'call-1',
+        name: 'web_search',
+        input: {},
+      },
+    }, {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: '{"queries":["microduck"]}' },
+    }, {
+      type: 'content_block_stop',
+      index: 0,
+    }, {
+      type: 'message_delta',
+      delta: { stop_reason: 'tool_use' },
+      usage: { output_tokens: 10 },
+    }, {
+      type: 'message_stop',
+    }]
+    const sse = events
       .map((event) => `data: ${JSON.stringify(event)}\n\n`)
-      .concat('data: [DONE]\n\n')
       .join('')
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response(sse, {
@@ -50,13 +46,12 @@ describe('DeepSeek OpenAI-compatible tool-call stream', () => {
 
     const connection = resolveAdapterOptions({
       baseURL: 'http://test',
-      apiKeyEnv: 'TEST',
       thinking: 'enabled',
       reasoningEffort: 'off',
     })
     const adapter = new DeepSeekAdapter({
       options: () => connection,
-      resolveApiKey: async () => 'test-key',
+      resolveAuth: async () => ({ headers: { 'x-api-key': 'test-key' } }),
       resolveUserId: () => 'test-user' as unknown as AnonymousUserId,
       prepareExtensions: async () => ({ fields: {}, accept: async () => {} }),
     })
@@ -82,7 +77,7 @@ describe('DeepSeek OpenAI-compatible tool-call stream', () => {
 
     expect(deltas).toEqual([
       { type: 'tool-call-delta', index: 0, id: 'call-1', name: 'web_search', argumentsDelta: '' },
-      { type: 'tool-call-delta', index: 0, id: 'call-1', name: 'web_search', argumentsDelta: '{"queries":["microduck"]}' },
+      { type: 'tool-call-delta', index: 0, id: 'call-1', argumentsDelta: '{"queries":["microduck"]}' },
     ])
   })
 })
