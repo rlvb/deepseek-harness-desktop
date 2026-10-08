@@ -15,10 +15,10 @@ import {
 /** Desktop platforms with a fixed installer download endpoint. */
 export type DesktopDownloadPlatform = 'darwin' | 'win32'
 
-/** Fixed download endpoints that record one user-confirmed installer download. */
+/** Fixed enterprise download endpoints that record one user-confirmed installer download. */
 export const DESKTOP_DOWNLOAD_URLS: Readonly<Record<DesktopDownloadPlatform, string>> = {
-  darwin: 'https://www.dshdesktop.cn/api/downloads/mac',
-  win32: 'https://www.dshdesktop.cn/api/downloads/windows',
+  darwin: 'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/mac.dmg',
+  win32: 'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/windows.exe',
 }
 
 /** Header pinning a download request and response to the checked release. */
@@ -454,7 +454,11 @@ export function assertSecureDownloadUrl(finalUrl: string): URL {
   } catch {
     throw new UpdateDownloadError('redirect-origin', 'The update download transport reported no usable final URL.')
   }
-  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port && parsed.port !== '443') {
+  const enterpriseUpdatePort = parsed.hostname === 'tokenapi.chinabeego.com'
+    && parsed.port === '9443'
+    && parsed.pathname.startsWith('/guide/dsh-desktop/')
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password
+    || parsed.port && parsed.port !== '443' && !enterpriseUpdatePort) {
     throw new UpdateDownloadError('redirect-origin', 'The update download must settle on HTTPS.')
   }
   return parsed

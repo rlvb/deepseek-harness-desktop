@@ -48,7 +48,7 @@ function windowsArtifact(): Uint8Array {
 function chunkedResponse(
   chunks: readonly Uint8Array[],
   headers: HeadersInit = {},
-  finalUrl: string = 'https://www.dshdesktop.cn/api/downloads/mac',
+  finalUrl: string = 'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/mac.dmg',
 ): UpdateArtifactResponse {
   let index = 0
   const response = new Response(new ReadableStream<Uint8Array>({
@@ -88,6 +88,13 @@ afterEach(async () => {
 })
 
 describe('desktop update installer download', () => {
+  it('pins enterprise installer download endpoints', () => {
+    expect(DESKTOP_DOWNLOAD_URLS).toEqual({
+      darwin: 'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/mac.dmg',
+      win32: 'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/windows.exe',
+    })
+  })
+
   it('streams a macOS DMG from only the fixed endpoint and atomically completes it', async () => {
     const directory = await temporaryDirectory()
     const artifact = dmgArtifact()
@@ -121,7 +128,11 @@ describe('desktop update installer download', () => {
       destinationPath: destinationPath(directory, 'win32', '2.2.0'),
       request: async (url) => {
         expect(url).toBe(DESKTOP_DOWNLOAD_URLS.win32)
-        return chunkedResponse([artifact], {}, 'https://www.dshdesktop.cn/api/downloads/windows')
+        return chunkedResponse(
+          [artifact],
+          {},
+          'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/windows.exe',
+        )
       },
     })
 
@@ -135,6 +146,7 @@ describe('desktop update installer download', () => {
     'https://cdn-lfs-cn-1.modelscope.cn/installer.dmg',
     'https://other.example/installer.dmg',
     'https://modelscope.cn/models/another-user/another-repo/installer.dmg',
+    'https://tokenapi.chinabeego.com:9443/guide/dsh-desktop/mac.dmg',
   ])('accepts a valid installer from an HTTPS redirect to %s', async finalUrl => {
     const directory = await temporaryDirectory()
     const artifact = dmgArtifact()
@@ -154,7 +166,8 @@ describe('desktop update installer download', () => {
   it.each([
     ['an https downgrade', 'http://www.dshdesktop.cn/api/downloads/mac'],
     ['embedded credentials', 'https://user:password@cdn.example/installer.dmg'],
-    ['a non-HTTPS port', 'https://cdn.example:8080/installer.dmg'],
+    ['an unapproved HTTPS port', 'https://cdn.example:8080/installer.dmg'],
+    ['an unapproved path on the enterprise port', 'https://tokenapi.chinabeego.com:9443/private/mac.dmg'],
     ['a missing final URL', ''],
   ] as const)('rejects a download that settles on %s', async (_label, finalUrl) => {
     const directory = await temporaryDirectory()
